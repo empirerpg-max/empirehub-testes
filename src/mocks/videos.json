@@ -1,0 +1,26 @@
+[
+  {
+    "id": "mock-video-1",
+    "titulo": "Empire Intro",
+    "artista": "Empire Studio",
+    "capa": "",
+    "audioSrc": "dQw4w9WgXcQ",
+    "categoria": "musicvideo"
+  },
+  {
+    "id": "mock-video-2",
+    "titulo": "City Lights",
+    "artista": "Neon Crew",
+    "capa": "",
+    "audioSrc": "dQw4w9WgXcQ",
+    "categoria": "musicvideo"
+  },
+  {
+    "id": "mock-video-3",
+    "titulo": "Deep Signal",
+    "artista": "Frequency Lab",
+    "capa": "",
+    "audioSrc": "dQw4w9WgXcQ",
+    "categoria": "video"
+  }
+]

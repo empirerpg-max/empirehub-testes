@@ -1,0 +1,42 @@
+[
+  {
+    "id": "mock-musica-1",
+    "titulo": "Neon Dust",
+    "artista": "Empire Artists",
+    "capa": "",
+    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
+    "categoria": "musica"
+  },
+  {
+    "id": "mock-musica-2",
+    "titulo": "Midnight Protocol",
+    "artista": "Dark Circuit",
+    "capa": "",
+    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
+    "categoria": "musica"
+  },
+  {
+    "id": "mock-musica-3",
+    "titulo": "Signal Lost",
+    "artista": "Void Wave",
+    "capa": "",
+    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
+    "categoria": "musica"
+  },
+  {
+    "id": "mock-musica-4",
+    "titulo": "Telegram Test Track",
+    "artista": "Bot Storage",
+    "capa": "",
+    "audioSrc": "tg:BQACAgIAAxkBAAIBf2Y0000000000000000PLACEHOLDER",
+    "categoria": "musica"
+  },
+  {
+    "id": "mock-musica-5",
+    "titulo": "Drive Audio Sample",
+    "artista": "Cloud Files",
+    "capa": "",
+    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
+    "categoria": "musica"
+  }
+]
