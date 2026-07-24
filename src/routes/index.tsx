@@ -5,19 +5,65 @@ export const Route = createFileRoute("/")({ component: HomePage });
 
 function HomePage() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-4 text-center">
-      <div className="size-16 rounded-2xl bg-primary/10 grid place-items-center">
-        <Music2 className="size-8 text-primary" />
+    <main
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "60vh",
+        gap: "1.5rem",
+        padding: "1rem",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.06)",
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        <Music2 size={28} color="#fff" />
       </div>
       <div>
-        <h1 className="text-2xl font-black uppercase tracking-tight">Empire Hub</h1>
-        <p className="text-sm text-muted-foreground mt-1">Ambiente de testes</p>
+        <h1
+          style={{
+            fontSize: "1.5rem",
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: "-0.02em",
+            color: "#fff",
+            margin: 0,
+          }}
+        >
+          Empire Hub
+        </h1>
+        <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
+          Ambiente de testes
+        </p>
       </div>
       <Link
         to="/play"
-        className="inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-full px-6 py-3 text-sm font-bold uppercase tracking-wide hover:opacity-90 transition-opacity"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          background: "#fff",
+          color: "#000",
+          borderRadius: 999,
+          padding: "12px 24px",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          textDecoration: "none",
+        }}
       >
-        <Play className="size-4" />
+        <Play size={14} />
         Abrir Empire Play
       </Link>
     </main>

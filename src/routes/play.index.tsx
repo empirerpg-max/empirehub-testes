@@ -1,17 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { Music2, Video, BarChart2, Play as PlayIcon, ChevronRight } from "lucide-react";
-import { usePlay, type PlayItem, detectMediaType } from "@/lib/playContext";
+import { usePlay, type PlayItem, detectMediaType } from "../lib/playContext";
 
-import musicasRaw from "@/mocks/musicas.json";
-import videosRaw from "@/mocks/videos.json";
-import chartsRaw from "@/mocks/charts.json";
+import musicasRaw from "../mocks/musicas.json";
+import videosRaw from "../mocks/videos.json";
+import chartsRaw from "../mocks/charts.json";
 
 export const Route = createFileRoute("/play/")({ component: EmpirePlay });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Adaptadores mock → PlayItem
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Adaptadores ───────────────────────────────────────────────────────────
 
 type RawMusica = {
   id: string;
@@ -20,20 +18,14 @@ type RawMusica = {
   "Capa da música": string;
   "ID do arquivo": string;
   "Letra"?: string;
-  "Data de lançamento"?: string;
-  "ID do tópico"?: string;
 };
-
 type RawVideo = {
   id: string;
   "Tipo de Clipe": string;
   "ACT Principal": string;
   "Thumb": string;
   "ID do arquivo": string;
-  "Data de lançamento"?: string;
-  "ID do tópico"?: string;
 };
-
 type RawChartItem = {
   "Posição": string;
   "Nome da música"?: string;
@@ -45,73 +37,76 @@ type RawChartItem = {
   "ID do criador"?: string;
 };
 
-function rawMusicaToPlayItem(r: RawMusica): PlayItem {
-  return {
-    id: r.id,
-    titulo: r["Nome da música"],
-    artista: r["ACT Principal"],
-    capa: r["Capa da música"],
-    audioSrc: r["ID do arquivo"],
-    letra: r["Letra"],
-    categoria: "musica",
-  };
-}
+const toMusica = (r: RawMusica): PlayItem => ({
+  id: r.id,
+  titulo: r["Nome da música"],
+  artista: r["ACT Principal"],
+  capa: r["Capa da música"],
+  audioSrc: r["ID do arquivo"],
+  letra: r["Letra"],
+  categoria: "musica",
+});
+const toVideo = (r: RawVideo): PlayItem => ({
+  id: r.id,
+  titulo: r["Tipo de Clipe"],
+  artista: r["ACT Principal"],
+  capa: r["Thumb"],
+  audioSrc: r["ID do arquivo"],
+  categoria: "musicvideo",
+});
+const toChart = (r: RawChartItem, i: number): PlayItem => ({
+  id: r["ID do tópico"] || `chart-${i}`,
+  titulo: r["Nome da música"] ?? r["Nome do vídeo"] ?? "Sem título",
+  artista: r["ID do criador"] ?? "",
+  capa: r["Capa da música"] ?? r["Thumb"] ?? "",
+  audioSrc: r["ID do arquivo"],
+  categoria: "musica",
+});
 
-function rawVideoToPlayItem(r: RawVideo): PlayItem {
-  return {
-    id: r.id,
-    titulo: r["Tipo de Clipe"],
-    artista: r["ACT Principal"],
-    capa: r["Thumb"],
-    audioSrc: r["ID do arquivo"],
-    categoria: "musicvideo",
-  };
-}
+// ── Helpers visuais ───────────────────────────────────────────────────
 
-function rawChartToPlayItem(r: RawChartItem, idx: number): PlayItem {
-  return {
-    id: r["ID do tópico"] || `chart-${idx}`,
-    titulo: r["Nome da música"] ?? r["Nome do vídeo"] ?? "Sem título",
-    artista: r["ID do criador"] ?? "",
-    capa: r["Capa da música"] ?? r["Thumb"] ?? "",
-    audioSrc: r["ID do arquivo"],
-    categoria: "musica",
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers visuais
-// ─────────────────────────────────────────────────────────────────────────────
-
-function driveImg(capa: string, size = 120): string {
+function driveImg(capa: string, size = 120) {
   if (!capa) return "";
   const id =
     capa.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] ||
     capa.match(/id=([a-zA-Z0-9_-]+)/)?.[1] ||
     (!/^https?:\/\//.test(capa) && !capa.includes("/") ? capa : null);
-  if (id) return `https://lh3.googleusercontent.com/d/${id}=w${size}`;
-  return capa;
+  return id ? `https://lh3.googleusercontent.com/d/${id}=w${size}` : capa;
 }
 
-function mediaTypeBadge(audioSrc: string) {
-  const t = detectMediaType(audioSrc);
-  if (t === "telegram") return <span className="text-[8px] font-mono bg-blue-500/20 text-blue-400 rounded px-1 py-0.5 uppercase">TG</span>;
-  if (t === "youtube")  return <span className="text-[8px] font-mono bg-red-500/20 text-red-400 rounded px-1 py-0.5 uppercase">YT</span>;
-  return <span className="text-[8px] font-mono bg-white/10 text-white/40 rounded px-1 py-0.5 uppercase">DR</span>;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Subcomponentes
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
+function Badge({ src }: { src: string }) {
+  const t = detectMediaType(src);
+  const map = {
+    telegram: { bg: "rgba(59,130,246,0.2)", color: "#93c5fd", label: "TG" },
+    youtube:  { bg: "rgba(239,68,68,0.2)",  color: "#fca5a5", label: "YT" },
+    drive:    { bg: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)", label: "DR" },
+  };
+  const s = map[t];
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <span className="text-primary">{icon}</span>
-      <h2 className="text-xs font-black uppercase tracking-widest text-white/60">{label}</h2>
-    </div>
+    <span style={{
+      fontSize: 8, fontFamily: "monospace", fontWeight: 700,
+      background: s.bg, color: s.color,
+      borderRadius: 4, padding: "1px 4px", textTransform: "uppercase",
+      flexShrink: 0,
+    }}>
+      {s.label}
+    </span>
   );
 }
+
+const PauseIcon = () => (
+  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+    <rect x="6" y="4" width="4" height="16" />
+    <rect x="14" y="4" width="4" height="16" />
+  </svg>
+);
+const PlaySvg = () => (
+  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+    <polygon points="5,3 19,12 5,21" />
+  </svg>
+);
+
+// ── Cards ──────────────────────────────────────────────────────────────
 
 function MusicCard({ item, queue, isActive }: { item: PlayItem; queue: PlayItem[]; isActive: boolean }) {
   const { play, state } = usePlay();
@@ -120,50 +115,45 @@ function MusicCard({ item, queue, isActive }: { item: PlayItem; queue: PlayItem[
   return (
     <button
       onClick={() => play(item, queue, { autoPlay: true })}
-      className={`flex items-center gap-3 w-full text-left rounded-xl px-3 py-2.5 transition-all ${
-        isActive
-          ? "bg-primary/10 ring-1 ring-primary/40"
-          : "hover:bg-white/5 active:bg-white/10"
-      }`}
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        width: "100%", textAlign: "left",
+        borderRadius: 12, padding: "10px 12px",
+        background: isActive ? "rgba(255,255,255,0.07)" : "transparent",
+        border: isActive ? "1px solid rgba(255,255,255,0.12)" : "1px solid transparent",
+        cursor: "pointer", transition: "background 0.15s",
+      }}
     >
-      {/* Capa */}
-      <div className="size-10 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 relative">
-        {item.capa ? (
-          <img src={driveImg(item.capa, 80)} alt={item.titulo}
-            className="w-full h-full object-cover" loading="lazy" decoding="async" />
-        ) : (
-          <div className="w-full h-full grid place-items-center">
-            <Music2 className="size-4 text-white/30" />
-          </div>
-        )}
+      <div style={{
+        width: 40, height: 40, borderRadius: 8, overflow: "hidden",
+        background: "rgba(255,255,255,0.05)", flexShrink: 0, position: "relative",
+      }}>
+        {item.capa
+          ? <img src={driveImg(item.capa, 80)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+          : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center" }}>
+              <Music2 size={14} color="rgba(255,255,255,0.2)" />
+            </div>}
         {isActive && (
-          <div className="absolute inset-0 bg-primary/30 grid place-items-center">
-            {playing ? (
-              <svg className="size-3 fill-white" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="6" y="4" width="4" height="16" />
-                <rect x="14" y="4" width="4" height="16" />
-              </svg>
-            ) : (
-              <svg className="size-3 fill-white" viewBox="0 0 24 24" aria-hidden="true">
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-            )}
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)",
+            display: "grid", placeItems: "center", color: "#fff",
+          }}>
+            {playing ? <PauseIcon /> : <PlaySvg />}
           </div>
         )}
       </div>
-
-      {/* Info */}
-      <div className="min-w-0 flex-1">
-        <p className={`text-xs font-bold truncate ${ isActive ? "text-primary" : "text-white" }`}>
-          {item.titulo}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{
+          fontSize: 12, fontWeight: 700, margin: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: isActive ? "#fff" : "rgba(255,255,255,0.85)",
+        }}>{item.titulo}</p>
+        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", margin: "2px 0 0",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.artista}
         </p>
-        <p className="text-[11px] text-white/40 truncate">{item.artista}</p>
       </div>
-
-      {/* Badge */}
-      <div className="flex-shrink-0">
-        {mediaTypeBadge(item.audioSrc)}
-      </div>
+      <Badge src={item.audioSrc} />
     </button>
   );
 }
@@ -171,43 +161,46 @@ function MusicCard({ item, queue, isActive }: { item: PlayItem; queue: PlayItem[
 function VideoCard({ item, isActive }: { item: PlayItem; isActive: boolean }) {
   const { play, state } = usePlay();
   const playing = isActive && state.playing;
-
   return (
     <button
       onClick={() => play(item, undefined, { autoPlay: true })}
-      className={`relative flex-shrink-0 w-36 rounded-xl overflow-hidden aspect-video bg-white/5 transition-all ${
-        isActive ? "ring-2 ring-primary" : "hover:scale-105"
-      }`}
+      style={{
+        position: "relative", flexShrink: 0, width: 144,
+        borderRadius: 12, overflow: "hidden", aspectRatio: "16/9",
+        background: "rgba(255,255,255,0.05)", border: "none", cursor: "pointer",
+        outline: isActive ? "2px solid rgba(255,255,255,0.6)" : "none",
+        transition: "transform 0.15s",
+      }}
     >
-      {item.capa ? (
-        <img src={driveImg(item.capa, 300)} alt={item.titulo}
-          className="w-full h-full object-cover" loading="lazy" decoding="async" />
-      ) : (
-        <div className="w-full h-full grid place-items-center bg-white/5">
-          <Video className="size-6 text-white/20" />
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-2">
-        <p className="text-[10px] font-bold text-white truncate">{item.titulo}</p>
-        <p className="text-[9px] text-white/50 truncate">{item.artista}</p>
+      {item.capa
+        ? <img src={driveImg(item.capa, 300)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+        : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center" }}>
+            <Video size={20} color="rgba(255,255,255,0.2)" />
+          </div>}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%)",
+      }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 8 }}>
+        <p style={{ fontSize: 9, fontWeight: 700, color: "#fff", margin: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.titulo}
+        </p>
+        <p style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", margin: "2px 0 0" }}>{item.artista}</p>
       </div>
-      <div className="absolute top-1.5 right-1.5">
-        {mediaTypeBadge(item.audioSrc)}
+      <div style={{ position: "absolute", top: 6, right: 6 }}>
+        <Badge src={item.audioSrc} />
       </div>
       {isActive && (
-        <div className="absolute inset-0 bg-primary/20 grid place-items-center">
-          <div className="size-8 rounded-full bg-primary/80 grid place-items-center">
-            {playing ? (
-              <svg className="size-3 fill-white" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="6" y="4" width="4" height="16" />
-                <rect x="14" y="4" width="4" height="16" />
-              </svg>
-            ) : (
-              <svg className="size-3 fill-white" viewBox="0 0 24 24" aria-hidden="true">
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-            )}
+        <div style={{
+          position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)",
+          display: "grid", placeItems: "center",
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            background: "rgba(255,255,255,0.9)", display: "grid", placeItems: "center",
+          }}>
+            {playing ? <PauseIcon /> : <PlaySvg />}
           </div>
         </div>
       )}
@@ -218,192 +211,186 @@ function VideoCard({ item, isActive }: { item: PlayItem; isActive: boolean }) {
 function ChartRow({ item, position, isActive }: { item: PlayItem; position: number; isActive: boolean }) {
   const { play, state } = usePlay();
   const playing = isActive && state.playing;
-
   return (
     <button
       onClick={() => play(item, undefined, { autoPlay: true })}
-      className={`flex items-center gap-3 w-full text-left rounded-lg px-3 py-2 transition-all ${
-        isActive ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-white/5"
-      }`}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        width: "100%", textAlign: "left",
+        borderRadius: 8, padding: "8px 10px",
+        background: isActive ? "rgba(255,255,255,0.06)" : "transparent",
+        border: "1px solid transparent", cursor: "pointer", transition: "background 0.15s",
+      }}
     >
-      <span className={`text-xs font-black w-4 tabular-nums ${ isActive ? "text-primary" : "text-white/30" }`}>
-        {position}
-      </span>
-      <div className="size-8 rounded-md overflow-hidden bg-white/5 flex-shrink-0">
-        {item.capa ? (
-          <img src={driveImg(item.capa, 64)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-        ) : (
-          <div className="w-full h-full grid place-items-center">
-            <Music2 className="size-3 text-white/20" />
-          </div>
-        )}
+      <span style={{
+        fontSize: 11, fontWeight: 900, width: 16,
+        color: isActive ? "#fff" : "rgba(255,255,255,0.25)",
+        fontVariantNumeric: "tabular-nums", flexShrink: 0,
+      }}>{position}</span>
+      <div style={{ width: 32, height: 32, borderRadius: 6, overflow: "hidden",
+        background: "rgba(255,255,255,0.05)", flexShrink: 0 }}>
+        {item.capa
+          ? <img src={driveImg(item.capa, 64)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+          : <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center" }}>
+              <Music2 size={11} color="rgba(255,255,255,0.2)" />
+            </div>}
       </div>
-      <div className="min-w-0 flex-1">
-        <p className={`text-xs font-bold truncate ${ isActive ? "text-primary" : "text-white" }`}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, margin: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: isActive ? "#fff" : "rgba(255,255,255,0.85)" }}>
           {item.titulo}
         </p>
-        <p className="text-[10px] text-white/40 truncate">{item.artista}</p>
+        <p style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", margin: "1px 0 0" }}>{item.artista}</p>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        {mediaTypeBadge(item.audioSrc)}
-        {isActive && playing ? (
-          <svg className="size-3 fill-primary" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
-          </svg>
-        ) : (
-          <ChevronRight className="size-3 text-white/20" />
-        )}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        <Badge src={item.audioSrc} />
+        {isActive && playing
+          ? <PauseIcon />
+          : <ChevronRight size={11} color="rgba(255,255,255,0.2)" />}
       </div>
     </button>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tabs
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Página ───────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: "musicas", label: "Músicas", icon: <Music2 className="size-3.5" /> },
-  { id: "videos", label: "Vídeos", icon: <Video className="size-3.5" /> },
-  { id: "charts", label: "Charts", icon: <BarChart2 className="size-3.5" /> },
-] as const;
+type TabId = "musicas" | "videos" | "charts";
+type ChartTab = "spotify" | "apple" | "youtube";
 
-type TabId = typeof TABS[number]["id"];
-
-const CHART_TABS = [
+const TABS: { id: TabId; label: string; Icon: typeof Music2 }[] = [
+  { id: "musicas", label: "Músicas", Icon: Music2 },
+  { id: "videos",  label: "Vídeos",  Icon: Video },
+  { id: "charts",  label: "Charts",  Icon: BarChart2 },
+];
+const CHART_TABS: { id: ChartTab; label: string }[] = [
   { id: "spotify", label: "Spotify" },
-  { id: "apple", label: "Apple" },
+  { id: "apple",   label: "Apple" },
   { id: "youtube", label: "YouTube" },
-] as const;
-
-type ChartTab = typeof CHART_TABS[number]["id"];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Página principal
-// ─────────────────────────────────────────────────────────────────────────────
+];
 
 function EmpirePlay() {
   const { state } = usePlay();
   const [tab, setTab] = useState<TabId>("musicas");
   const [chartTab, setChartTab] = useState<ChartTab>("spotify");
 
-  const musicas = useMemo(() => (musicasRaw as RawMusica[]).map(rawMusicaToPlayItem), []);
-  const videos  = useMemo(() => (videosRaw as RawVideo[]).map(rawVideoToPlayItem), []);
+  const musicas = useMemo(() => (musicasRaw as RawMusica[]).map(toMusica), []);
+  const videos  = useMemo(() => (videosRaw  as RawVideo[]).map(toVideo),  []);
   const charts  = useMemo(() => ({
-    spotify: (chartsRaw.spotify as RawChartItem[]).map(rawChartToPlayItem),
-    apple:   (chartsRaw.apple   as RawChartItem[]).map(rawChartToPlayItem),
-    youtube: (chartsRaw.youtube as RawChartItem[]).map(rawChartToPlayItem),
+    spotify: (chartsRaw.spotify as RawChartItem[]).map(toChart),
+    apple:   (chartsRaw.apple   as RawChartItem[]).map(toChart),
+    youtube: (chartsRaw.youtube as RawChartItem[]).map(toChart),
   }), []);
 
-  const activeId =
-    state.currentIdx !== null ? state.queue[state.currentIdx]?.id : null;
+  const activeId = state.currentIdx !== null ? state.queue[state.currentIdx]?.id : null;
 
   return (
-    <div className="flex flex-col">
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-white/5 px-4 pt-2 pb-0">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-2 pb-2">
-            <PlayIcon className="size-4 text-primary" />
-            <span className="text-sm font-black uppercase tracking-widest">Empire Play</span>
-            <span className="ml-auto text-[9px] text-white/20 font-mono uppercase">v-testes</span>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+
+      {/* Header */}
+      <header style={{
+        position: "sticky", top: 0, zIndex: 20,
+        background: "rgba(0,0,0,0.8)",
+        backdropFilter: "blur(16px)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        padding: "0 16px",
+      }}>
+        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+          {/* Logotipo */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 0 0",
+          }}>
+            <PlayIcon size={14} color="rgba(255,255,255,0.6)" />
+            <span style={{
+              fontSize: 11, fontWeight: 900, textTransform: "uppercase",
+              letterSpacing: "0.18em", color: "rgba(255,255,255,0.9)",
+            }}>Empire Play</span>
+            <span style={{
+              marginLeft: "auto", fontSize: 8,
+              color: "rgba(255,255,255,0.2)", fontFamily: "monospace",
+            }}>v-testes</span>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 -mb-px">
-            {TABS.map((t) => (
+          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+            {TABS.map(({ id, label, Icon }) => (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${
-                  tab === t.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-white/40 hover:text-white/70"
-                }`}
+                key={id}
+                onClick={() => setTab(id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "8px 12px",
+                  fontSize: 11, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: "0.06em",
+                  background: "none", border: "none", cursor: "pointer",
+                  borderBottom: `2px solid ${tab === id ? "#fff" : "transparent"}`,
+                  color: tab === id ? "#fff" : "rgba(255,255,255,0.35)",
+                  transition: "color 0.15s",
+                  marginBottom: -1,
+                }}
               >
-                {t.icon}
-                {t.label}
+                <Icon size={13} />
+                {label}
               </button>
             ))}
           </div>
         </div>
       </header>
 
-      {/* ── Body ── */}
-      <main className="max-w-2xl mx-auto w-full px-4 py-4 space-y-2">
+      {/* Body */}
+      <main style={{ maxWidth: 640, margin: "0 auto", width: "100%", padding: "16px 16px 0" }}>
 
-        {/* ─── Tab Músicas ─── */}
         {tab === "musicas" && (
           <section>
-            <SectionHeader
-              icon={<Music2 className="size-4" />}
-              label={`${musicas.length} faixas`}
-            />
-            <div className="space-y-0.5">
+            <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.14em", color: "rgba(255,255,255,0.25)", marginBottom: 10 }}>
+              {musicas.length} faixas
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {musicas.map((item) => (
-                <MusicCard
-                  key={item.id}
-                  item={item}
-                  queue={musicas}
-                  isActive={activeId === item.id}
-                />
+                <MusicCard key={item.id} item={item} queue={musicas} isActive={activeId === item.id} />
               ))}
             </div>
           </section>
         )}
 
-        {/* ─── Tab Vídeos ─── */}
         {tab === "videos" && (
           <section>
-            <SectionHeader
-              icon={<Video className="size-4" />}
-              label={`${videos.length} clipes`}
-            />
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            <p style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.14em", color: "rgba(255,255,255,0.25)", marginBottom: 10 }}>
+              {videos.length} clipes
+            </p>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
               {videos.map((item) => (
-                <VideoCard
-                  key={item.id}
-                  item={item}
-                  isActive={activeId === item.id}
-                />
+                <VideoCard key={item.id} item={item} isActive={activeId === item.id} />
               ))}
             </div>
           </section>
         )}
 
-        {/* ─── Tab Charts ─── */}
         {tab === "charts" && (
           <section>
-            {/* Sub-tabs das plataformas */}
-            <div className="flex gap-1 mb-4">
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
               {CHART_TABS.map((ct) => (
                 <button
                   key={ct.id}
                   onClick={() => setChartTab(ct.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${
-                    chartTab === ct.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-white/5 text-white/40 hover:text-white/70"
-                  }`}
+                  style={{
+                    padding: "5px 14px", borderRadius: 999,
+                    fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                    background: chartTab === ct.id ? "#fff" : "rgba(255,255,255,0.06)",
+                    color: chartTab === ct.id ? "#000" : "rgba(255,255,255,0.4)",
+                    border: "none", cursor: "pointer", transition: "background 0.15s",
+                  }}
                 >
                   {ct.label}
                 </button>
               ))}
             </div>
-
-            <SectionHeader
-              icon={<BarChart2 className="size-4" />}
-              label={`Top ${charts[chartTab].length} — ${CHART_TABS.find(c => c.id === chartTab)?.label}`}
-            />
-
-            <div className="space-y-0.5">
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {charts[chartTab].map((item, idx) => (
-                <ChartRow
-                  key={item.id}
-                  item={item}
-                  position={idx + 1}
-                  isActive={activeId === item.id}
-                />
+                <ChartRow key={item.id} item={item} position={idx + 1} isActive={activeId === item.id} />
               ))}
             </div>
           </section>

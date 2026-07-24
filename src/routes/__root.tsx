@@ -2,39 +2,19 @@ import {
   Outlet,
   Link,
   createRootRoute,
-  useLocation,
+  useRouterState,
 } from "@tanstack/react-router";
-import { Home, Music2, Play } from "lucide-react";
-import { PlayProvider } from "@/lib/playContext";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { Home, Play } from "lucide-react";
+import { PlayProvider } from "../lib/playContext";
+import { MiniPlayer } from "../components/MiniPlayer";
 import { Toaster } from "sonner";
 
-import appCss from "../styles.css?url";
-
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "theme-color", content: "#000000" },
-      { title: "Empire Play — Testes" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap",
-      },
-    ],
-  }),
-  ssr: false,
   component: RootComponent,
 });
 
 function BottomNav() {
-  const { pathname } = useLocation();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const items = [
     { to: "/", label: "Início", icon: Home },
     { to: "/play", label: "Empire Play", icon: Play },
@@ -50,21 +30,25 @@ function BottomNav() {
           style={{ backdropFilter: "blur(28px) saturate(180%)" }}
         >
           {items.map((it) => {
-            const active = pathname === it.to || (it.to !== "/" && pathname.startsWith(it.to));
+            const active =
+              pathname === it.to ||
+              (it.to !== "/" && pathname.startsWith(it.to));
             const Icon = it.icon;
             return (
               <Link
                 key={it.to}
                 to={it.to}
                 aria-label={it.label}
-                aria-current={active ? "page" : undefined}
                 className={`relative flex flex-col items-center justify-center gap-0.5 h-12 w-20 rounded-full transition-all ${
                   active
-                    ? "text-primary-foreground bg-primary"
-                    : "text-muted-foreground"
+                    ? "text-white bg-white/10"
+                    : "text-white/40"
                 }`}
               >
-                <Icon className="size-[18px]" strokeWidth={active ? 2.5 : 2} />
+                <Icon
+                  className="size-[18px]"
+                  strokeWidth={active ? 2.5 : 2}
+                />
                 <span className="text-[9px] font-bold uppercase tracking-tight leading-none">
                   {it.label}
                 </span>
@@ -80,14 +64,11 @@ function BottomNav() {
 function RootComponent() {
   return (
     <PlayProvider>
-      <div
-        className="min-h-screen flex flex-col bg-background pb-24"
-        style={{ paddingTop: "1rem" }}
-      >
+      <div className="min-h-screen flex flex-col bg-background" style={{ paddingBottom: "6rem" }}>
         <Outlet />
         <MiniPlayer />
         <BottomNav />
-        <Toaster position="top-center" richColors closeButton offset={80} />
+        <Toaster position="top-center" richColors closeButton />
       </div>
     </PlayProvider>
   );
