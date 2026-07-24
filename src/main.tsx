@@ -14,13 +14,12 @@ import { Home, Play } from 'lucide-react'
 import { PlayProvider } from './lib/playContext'
 import { MiniPlayer } from './components/MiniPlayer'
 import { Toaster } from 'sonner'
-import EmpirePlayPage from './routes/play.index'
+import EmpirePlay from './routes/play.index'
 import IndexPage from './routes/index'
 import './styles.css'
 
 const queryClient = new QueryClient()
 
-// ── Bottom Nav ──────────────────────────────────────────────────────────────
 function BottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const items = [
@@ -31,15 +30,12 @@ function BottomNav() {
     <nav style={{
       position: 'fixed',
       bottom: 'max(12px, env(safe-area-inset-bottom))',
-      left: 0, right: 0,
-      zIndex: 40,
-      display: 'flex',
-      justifyContent: 'center',
+      left: 0, right: 0, zIndex: 40,
+      display: 'flex', justifyContent: 'center',
       pointerEvents: 'none',
     }}>
       <div style={{
-        display: 'flex',
-        gap: 4,
+        display: 'flex', gap: 4,
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.1)',
         background: 'rgba(255,255,255,0.04)',
@@ -72,7 +68,6 @@ function BottomNav() {
   )
 }
 
-// ── Root ────────────────────────────────────────────────────────────────────
 const rootRoute = createRootRoute({
   component: () => (
     <PlayProvider>
@@ -86,7 +81,6 @@ const rootRoute = createRootRoute({
   ),
 })
 
-// ── Child routes ────────────────────────────────────────────────────────────
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -96,19 +90,16 @@ const indexRoute = createRoute({
 const playRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play',
-  component: EmpirePlayPage,
+  component: EmpirePlay,
 })
 
-// ── Router ──────────────────────────────────────────────────────────────────
 const routeTree = rootRoute.addChildren([indexRoute, playRoute])
-
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
 }
 
-// ── Mount ───────────────────────────────────────────────────────────────────
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

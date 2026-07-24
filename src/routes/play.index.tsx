@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { Music2, Video, BarChart2, Play as PlayIcon, ChevronRight } from "lucide-react";
 import { usePlay, type PlayItem, detectMediaType } from "../lib/playContext";
@@ -7,9 +6,7 @@ import musicasRaw from "../mocks/musicas.json";
 import videosRaw from "../mocks/videos.json";
 import chartsRaw from "../mocks/charts.json";
 
-export const Route = createFileRoute("/play/")({ component: EmpirePlay });
-
-// ── Adaptadores ───────────────────────────────────────────────────────────
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
 type RawMusica = {
   id: string;
@@ -37,6 +34,8 @@ type RawChartItem = {
   "ID do criador"?: string;
 };
 
+// ── Adaptadores ───────────────────────────────────────────────────────────────
+
 const toMusica = (r: RawMusica): PlayItem => ({
   id: r.id,
   titulo: r["Nome da música"],
@@ -63,7 +62,7 @@ const toChart = (r: RawChartItem, i: number): PlayItem => ({
   categoria: "musica",
 });
 
-// ── Helpers visuais ───────────────────────────────────────────────────
+// ── Helpers visuais ───────────────────────────────────────────────────────────
 
 function driveImg(capa: string, size = 120) {
   if (!capa) return "";
@@ -106,12 +105,11 @@ const PlaySvg = () => (
   </svg>
 );
 
-// ── Cards ──────────────────────────────────────────────────────────────
+// ── Cards ─────────────────────────────────────────────────────────────────────
 
 function MusicCard({ item, queue, isActive }: { item: PlayItem; queue: PlayItem[]; isActive: boolean }) {
   const { play, state } = usePlay();
   const playing = isActive && state.playing;
-
   return (
     <button
       onClick={() => play(item, queue, { autoPlay: true })}
@@ -121,7 +119,7 @@ function MusicCard({ item, queue, isActive }: { item: PlayItem; queue: PlayItem[
         borderRadius: 12, padding: "10px 12px",
         background: isActive ? "rgba(255,255,255,0.07)" : "transparent",
         border: isActive ? "1px solid rgba(255,255,255,0.12)" : "1px solid transparent",
-        cursor: "pointer", transition: "background 0.15s",
+        cursor: "pointer", color: "#fff", transition: "background 0.15s",
       }}
     >
       <div style={{
@@ -216,7 +214,7 @@ function ChartRow({ item, position, isActive }: { item: PlayItem; position: numb
       onClick={() => play(item, undefined, { autoPlay: true })}
       style={{
         display: "flex", alignItems: "center", gap: 10,
-        width: "100%", textAlign: "left",
+        width: "100%", textAlign: "left", color: "#fff",
         borderRadius: 8, padding: "8px 10px",
         background: isActive ? "rgba(255,255,255,0.06)" : "transparent",
         border: "1px solid transparent", cursor: "pointer", transition: "background 0.15s",
@@ -253,7 +251,7 @@ function ChartRow({ item, position, isActive }: { item: PlayItem; position: numb
   );
 }
 
-// ── Página ───────────────────────────────────────────────────────────────────
+// ── Página principal ──────────────────────────────────────────────────────────
 
 type TabId = "musicas" | "videos" | "charts";
 type ChartTab = "spotify" | "apple" | "youtube";
@@ -269,7 +267,7 @@ const CHART_TABS: { id: ChartTab; label: string }[] = [
   { id: "youtube", label: "YouTube" },
 ];
 
-function EmpirePlay() {
+export function EmpirePlay() {
   const { state } = usePlay();
   const [tab, setTab] = useState<TabId>("musicas");
   const [chartTab, setChartTab] = useState<ChartTab>("spotify");
@@ -296,11 +294,7 @@ function EmpirePlay() {
         padding: "0 16px",
       }}>
         <div style={{ maxWidth: 640, margin: "0 auto" }}>
-          {/* Logotipo */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "10px 0 0",
-          }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0 0" }}>
             <PlayIcon size={14} color="rgba(255,255,255,0.6)" />
             <span style={{
               fontSize: 11, fontWeight: 900, textTransform: "uppercase",
@@ -311,8 +305,6 @@ function EmpirePlay() {
               color: "rgba(255,255,255,0.2)", fontFamily: "monospace",
             }}>v-testes</span>
           </div>
-
-          {/* Tabs */}
           <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
             {TABS.map(({ id, label, Icon }) => (
               <button
@@ -399,3 +391,5 @@ function EmpirePlay() {
     </div>
   );
 }
+
+export default EmpirePlay;
