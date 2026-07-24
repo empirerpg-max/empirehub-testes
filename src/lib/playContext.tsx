@@ -6,17 +6,22 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
+import { telegramStreamUrl } from './telegramStorage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type MediaType = 'drive' | 'youtube'
+export type MediaType = 'drive' | 'youtube' | 'telegram'
 
 export type PlayItem = {
   id: string
   titulo: string
   artista: string
   capa: string
-  /** Drive file-id OU YouTube video-id (11 chars) ou URL completa */
+  /**
+   * Drive file-id | YouTube video-id (11 chars) | URL completa
+   * Para Telegram: prefixar com "tg:" + file_id
+   * Ex: audioSrc = "tg:BQACAgIAAxk..."
+   */
   audioSrc: string
   letra?: string
   categoria: 'musica' | 'musicvideo' | 'video'
@@ -49,7 +54,7 @@ type PlayContextType = {
   syncPlaying: (v: boolean) => void
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function extractDriveId(str: string): string | null {
   if (!str) return null
@@ -76,9 +81,17 @@ export function extractYouTubeId(str: string): string | null {
   return null
 }
 
+/** Extrai o file_id de um audioSrc com prefixo "tg:" */
+export function extractTelegramFileId(str: string): string | null {
+  if (!str) return null
+  if (str.startsWith('tg:')) return str.slice(3)
+  return null
+}
+
 export function detectMediaType(audioSrc: string): MediaType {
   if (!audioSrc) return 'drive'
   const s = audioSrc.trim()
+  if (s.startsWith('tg:')) return 'telegram'
   if (s.includes('youtube') || s.includes('youtu.be') || /^[a-zA-Z0-9_-]{11}$/.test(s)) {
     return 'youtube'
   }
@@ -90,12 +103,24 @@ export function driveStreamUrl(idOrUrl: string): string {
   return `https://empire-media-api.empirerpg-forum.workers.dev/?id=${id}`
 }
 
+/**
+ * Resolve a URL de stream para qualquer tipo de mídia.
+ * Use esta função no MiniPlayer em vez de chamar cada helper diretamente.
+ */
+export function resolveStreamUrl(audioSrc: string): string {
+  const type = detectMediaType(audioSrc)
+  if (type === 'telegram') return telegramStreamUrl(audioSrc)
+  if (type === 'drive')    return driveStreamUrl(audioSrc)
+  // YouTube não usa <audio> — é controlado via ytPlayerRef
+  return audioSrc
+}
+
 /** @deprecated */
 export const driveAudioPreview = driveStreamUrl
 /** @deprecated */
 export const driveProxyUrl = driveStreamUrl
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ─── Context ─────────────────────────────────────────────────────────────────
 
 const PlayContext = createContext<PlayContextType | null>(null)
 
@@ -106,7 +131,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     playing: false,
   })
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioRef    = useRef<HTMLAudioElement | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ytPlayerRef = useRef<any>(null)
 
@@ -116,13 +141,15 @@ export function PlayProvider({ children }: { children: ReactNode }) {
 
   const currentMediaId: string | null = currentItem
     ? mediaType === 'youtube'
-      ? (extractYouTubeId(currentItem.audioSrc) ?? currentItem.audioSrc)
-      : (extractDriveId(currentItem.audioSrc) ?? currentItem.audioSrc)
+      ? (extractYouTubeId(currentItem.audioSrc)    ?? currentItem.audioSrc)
+      : mediaType === 'telegram'
+        ? (extractTelegramFileId(currentItem.audioSrc) ?? currentItem.audioSrc)
+        : (extractDriveId(currentItem.audioSrc)    ?? currentItem.audioSrc)
     : null
 
   const confirmPlaying = useCallback(() => setState((s) => ({ ...s, playing: true })), [])
-  const confirmPaused = useCallback(() => setState((s) => ({ ...s, playing: false })), [])
-  const syncPlaying = useCallback((v: boolean) => setState((s) => ({ ...s, playing: v })), [])
+  const confirmPaused  = useCallback(() => setState((s) => ({ ...s, playing: false })), [])
+  const syncPlaying    = useCallback((v: boolean) => setState((s) => ({ ...s, playing: v })), [])
 
   const play = useCallback(
     (item: PlayItem, queue?: PlayItem[], opts?: { autoPlay?: boolean }) => {
