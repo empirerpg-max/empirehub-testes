@@ -1,10 +1,15 @@
-// Auto-generated route tree — mantido manual neste protótipo
-import { createRootRouteWithContext, createRoute } from '@tanstack/react-router'
-import { Route as RootRoute } from './routes/__root'
-import { Route as PlayRoute } from './routes/play.index'
-import { QueryClient } from '@tanstack/react-query'
+import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
-const rootRoute = RootRoute
-const playRoute = PlayRoute
+// Este arquivo é gerado manualmente para o ambiente de testes.
+// Em produção, o TanStack Router CLI gera automaticamente.
 
-export const routeTree = rootRoute.addChildren([playRoute])
+import { Route as rootRoute } from "./routes/__root";
+import { Route as IndexRoute } from "./routes/index";
+import { Route as PlayIndexRoute } from "./routes/play.index";
+
+const routeTree = rootRoute.addChildren([
+  IndexRoute,
+  PlayIndexRoute,
+]);
+
+export { routeTree };
