@@ -1,29 +1,18 @@
 [
   {
-    "id": "mock-video-1",
-    "Tipo de Clipe": "Clipe Oficial",
-    "ACT Principal": "Lana Empire",
-    "Thumb": "",
-    "ID do arquivo": "dQw4w9WgXcQ",
-    "Data de lançamento": "10/06/2025",
-    "ID do tópico": "mock-video-1"
+    "id_do_topico": "vid-001",
+    "tipo_de_clipe": "Empire Docs: Bastidores do Álbum",
+    "act_principal": "Empire RPG",
+    "capa_da_musica": "",
+    "id_do_arquivo": "dQw4w9WgXcQ",
+    "Data de lançamento": "05/07/2026"
   },
   {
-    "id": "mock-video-2",
-    "Tipo de Clipe": "Live Session",
-    "ACT Principal": "Zeon Records",
-    "Thumb": "",
-    "ID do arquivo": "9bZkp7q19f0",
-    "Data de lançamento": "01/07/2025",
-    "ID do tópico": "mock-video-2"
-  },
-  {
-    "id": "mock-video-3",
-    "Tipo de Clipe": "Lyric Video [TG MOCK]",
-    "ACT Principal": "Empire Storage",
-    "Thumb": "",
-    "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockVideoId001",
-    "Data de lançamento": "20/07/2026",
-    "ID do tópico": "mock-video-3"
+    "id_do_topico": "vid-002",
+    "tipo_de_clipe": "Empire Live: Noite de Prêmios",
+    "act_principal": "Empire RPG",
+    "capa_da_musica": "",
+    "id_do_arquivo": "L_jWHffIx5E",
+    "Data de lançamento": "20/06/2026"
   }
 ]

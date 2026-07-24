@@ -1,19 +1,39 @@
-{
-  "spotify": [
-    { "Posição": "1", "Nome da música": "Ascensão", "Capa da música": "", "ID do tópico": "mock-musica-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
-    { "Posição": "2", "Nome da música": "Coroa de Ouro", "Capa da música": "", "ID do tópico": "mock-musica-2", "ID do arquivo": "9bZkp7q19f0", "ID do criador": "Zeon Records" },
-    { "Posição": "3", "Nome da música": "Império", "Capa da música": "", "ID do tópico": "mock-musica-3", "ID do arquivo": "kJQP7kiw5Fk", "ID do criador": "Nova Era" },
-    { "Posição": "4", "Nome da música": "Hall of Fame", "Capa da música": "", "ID do tópico": "mock-musica-5", "ID do arquivo": "hT_nvWreIhg", "ID do criador": "Dynasty" },
-    { "Posição": "5", "Nome da música": "Telegram Beat", "Capa da música": "", "ID do tópico": "mock-musica-4", "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockFileId001", "ID do criador": "Empire Storage" }
-  ],
-  "apple": [
-    { "Posição": "1", "Nome da música": "Hall of Fame", "Capa da música": "", "ID do tópico": "mock-musica-5", "ID do arquivo": "hT_nvWreIhg", "ID do criador": "Dynasty" },
-    { "Posição": "2", "Nome da música": "Ascensão", "Capa da música": "", "ID do tópico": "mock-musica-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
-    { "Posição": "3", "Nome da música": "Império", "Capa da música": "", "ID do tópico": "mock-musica-3", "ID do arquivo": "kJQP7kiw5Fk", "ID do criador": "Nova Era" }
-  ],
-  "youtube": [
-    { "Posição": "1", "Nome do vídeo": "Lana Empire - Ascensão (Clipe Oficial)", "Thumb": "", "ID do tópico": "mock-video-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
-    { "Posição": "2", "Nome do vídeo": "Zeon Records - Coroa de Ouro (Live)", "Thumb": "", "ID do tópico": "mock-video-2", "ID do arquivo": "9bZkp7q19f0", "ID do criador": "Zeon Records" },
-    { "Posição": "3", "Nome do vídeo": "Empire Storage - Telegram Beat (Lyric)", "Thumb": "", "ID do tópico": "mock-video-3", "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockVideoId001", "ID do criador": "Empire Storage" }
-  ]
-}
+[
+  {
+    "aba": "Top_50_Spotify",
+    "nome": "Spotify",
+    "subtitulo": "Top 100 Global Spotify",
+    "icone": "🟢",
+    "cor": "text-green-400",
+    "entries": [
+      { "posicao": 1, "titulo": "Neon Empire", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
+      { "posicao": 2, "titulo": "Golden Rush", "capa": "", "audioSrc": "L_jWHffIx5E", "artista": "MaxVibe" },
+      { "posicao": 3, "titulo": "Crown Protocol", "capa": "", "audioSrc": "fJ9rUzIMcZQ", "artista": "DJ Crown" },
+      { "posicao": 4, "titulo": "Rise Again", "capa": "", "audioSrc": "kJQP7kiw5Fk", "artista": "Lana Empire" },
+      { "posicao": 5, "titulo": "Dark Throne", "capa": "", "audioSrc": "YQHsXMglC9A", "artista": "MaxVibe" }
+    ]
+  },
+  {
+    "aba": "Top_Songs_Apple_Music",
+    "nome": "Apple Music",
+    "subtitulo": "Top Songs Apple Music",
+    "icone": "🎵",
+    "cor": "text-red-400",
+    "entries": [
+      { "posicao": 1, "titulo": "Dark Throne", "capa": "", "audioSrc": "YQHsXMglC9A", "artista": "MaxVibe" },
+      { "posicao": 2, "titulo": "Neon Empire", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
+      { "posicao": 3, "titulo": "Rise Again", "capa": "", "audioSrc": "kJQP7kiw5Fk", "artista": "Lana Empire" }
+    ]
+  },
+  {
+    "aba": "Top_Videos_YT",
+    "nome": "YouTube",
+    "subtitulo": "Top Videos",
+    "icone": "📹",
+    "cor": "text-red-500",
+    "entries": [
+      { "posicao": 1, "titulo": "Neon Empire (Official Video)", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
+      { "posicao": 2, "titulo": "Golden Rush (Lyric Video)", "capa": "", "audioSrc": "L_jWHffIx5E", "artista": "MaxVibe" }
+    ]
+  }
+]
