@@ -5,29 +5,27 @@ import {
   useRef,
   useCallback,
   type ReactNode,
-} from 'react';
+} from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * "telegram" — arquivo armazenado no Telegram como storage de mídia.
- * O audioSrc deve iniciar com "tg:" seguido do file_id.
- * Ex: "tg:BQACAgIAAxkBAAI..."
- * O stream é resolvido pela API intermediária em telegramStorage.ts.
- */
-export type MediaType = 'drive' | 'youtube' | 'telegram';
+/** "telegram" = mídia armazenada no Telegram, servida via API intermediária */
+export type MediaType = "drive" | "youtube" | "telegram";
 
 export type PlayItem = {
   id: string;
   titulo: string;
   artista: string;
   capa: string;
-  /** Drive file-id | YouTube video-id (11 chars) | "tg:<file_id>" para Telegram */
+  /**
+   * Drive file-id puro OU YouTube video-id puro (11 chars) ou URL completa.
+   * Para Telegram: prefixo "tg:" + file_id  (ex: "tg:BQACAgIA...")
+   */
   audioSrc: string;
   letra?: string;
-  categoria: 'musica' | 'musicvideo' | 'video';
+  categoria: "musica" | "musicvideo" | "video";
 };
 
 type PlayerState = {
@@ -58,7 +56,7 @@ type PlayContextType = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers de extração de ID
+// Helpers de extração / detecção de ID
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function extractDriveId(str: string): string | null {
@@ -67,7 +65,7 @@ export function extractDriveId(str: string): string | null {
     String(str).match(/\/d\/([a-zA-Z0-9_-]+)/) ||
     String(str).match(/id=([a-zA-Z0-9_-]+)/);
   if (m) return m[1];
-  if (!/^https?:\/\//.test(str) && !str.includes('/')) return str.trim();
+  if (!/^https?:\/\//.test(str) && !str.includes("/")) return str.trim();
   return null;
 }
 
@@ -88,45 +86,60 @@ export function extractYouTubeId(str: string): string | null {
 
 /**
  * Extrai o file_id limpo de um audioSrc do Telegram.
- * Aceita: "tg:BQACAgIA..." ou "tg_file:BQACAgIA..."
+ * Aceita: "tg:BQACAgIA..." ou "tg_file:BQACAgIA..." ou o file_id puro.
  */
 export function extractTelegramFileId(str: string): string | null {
   if (!str) return null;
-  if (str.startsWith('tg:')) return str.slice(3);
-  if (str.startsWith('tg_file:')) return str.slice(8);
+  const s = str.trim();
+  if (s.startsWith("tg:")) return s.slice(3);
+  if (s.startsWith("tg_file:")) return s.slice(8);
   return null;
 }
 
 export function detectMediaType(audioSrc: string): MediaType {
-  if (!audioSrc) return 'drive';
+  if (!audioSrc) return "drive";
   const s = audioSrc.trim();
 
   // Telegram — prefixo explícito
-  if (s.startsWith('tg:') || s.startsWith('tg_file:')) return 'telegram';
+  if (s.startsWith("tg:") || s.startsWith("tg_file:")) return "telegram";
 
   // YouTube
   if (
-    s.includes('youtube') ||
-    s.includes('youtu.be') ||
+    s.includes("youtube") ||
+    s.includes("youtu.be") ||
     /^[a-zA-Z0-9_-]{11}$/.test(s)
-  ) return 'youtube';
+  ) {
+    return "youtube";
+  }
 
-  // Drive — fallback (comportamento original)
-  return 'drive';
+  // Drive — fallback
+  return "drive";
 }
 
 /**
  * URL de stream do Google Drive via proxy Cloudflare Worker.
- * Mantido exatamente igual ao app oficial.
+ * Comportamento idêntico ao app oficial.
  */
 export function driveStreamUrl(idOrUrl: string): string {
   const id = extractDriveId(idOrUrl) ?? idOrUrl;
   return `https://empire-media-api.empirerpg-forum.workers.dev/?id=${id}`;
 }
 
-/** @deprecated */
+/**
+ * URL de stream de mídia do Telegram via API intermediária local.
+ * Em produção: troque TELEGRAM_API_BASE pela URL do seu servidor.
+ */
+const TELEGRAM_API_BASE =
+  (import.meta as any).env?.VITE_TELEGRAM_API_BASE ?? "http://localhost:3001";
+
+export function telegramStreamUrl(fileIdOrSrc: string): string {
+  const id = extractTelegramFileId(fileIdOrSrc) ?? fileIdOrSrc;
+  return `${TELEGRAM_API_BASE}/play/${encodeURIComponent(id)}`;
+}
+
+/** @deprecated use driveStreamUrl */
 export const driveAudioPreview = driveStreamUrl;
-/** @deprecated */
+/** @deprecated use driveStreamUrl */
 export const driveProxyUrl = driveStreamUrl;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,9 +166,9 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     : null;
 
   const currentMediaId: string | null = currentItem
-    ? mediaType === 'youtube'
+    ? mediaType === "youtube"
       ? (extractYouTubeId(currentItem.audioSrc) ?? currentItem.audioSrc)
-      : mediaType === 'telegram'
+      : mediaType === "telegram"
       ? (extractTelegramFileId(currentItem.audioSrc) ?? currentItem.audioSrc)
       : (extractDriveId(currentItem.audioSrc) ?? currentItem.audioSrc)
     : null;
@@ -200,7 +213,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
+      audioRef.current.src = "";
     }
     if (ytPlayerRef.current) {
       try { ytPlayerRef.current.stopVideo(); } catch { /* */ }
@@ -265,6 +278,6 @@ export function PlayProvider({ children }: { children: ReactNode }) {
 
 export function usePlay() {
   const ctx = useContext(PlayContext);
-  if (!ctx) throw new Error('usePlay must be used inside PlayProvider');
+  if (!ctx) throw new Error("usePlay must be used inside PlayProvider");
   return ctx;
 }

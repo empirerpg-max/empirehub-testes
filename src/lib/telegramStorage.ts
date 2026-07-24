@@ -1,147 +1,125 @@
 /**
  * telegramStorage.ts
  *
- * Camada de abstração para o Telegram como storage de mídia.
+ * Camada de abstração entre o front e a API intermediária do Telegram.
+ * O front NUNCA fala diretamente com o Bot API do Telegram.
  *
- * Arquitetura:
- *   Front/PWA → esta lib → API Intermediária → Telegram Bot API / Local Bot API
- *
- * O front NUNCA fala diretamente com o Telegram.
- * Toda comunicação passa pelos endpoints da API intermediária.
- *
- * Sobre o Local Bot API Server (--local mode):
- *   - Upload até 2000 MB (vs 50 MB no cloud)
- *   - Download sem limite de tamanho (vs 20 MB no cloud)
- *   - getFile retorna file_path absoluto no servidor local
- *   - Requer logOut() no Bot API público antes de migrar
- *   - Em produção: precisa de proxy reverso (nginx/caddy) com TLS
- *
- * Prefixo de audioSrc: "tg:<file_id>"
- * Exemplo: "tg:BQACAgIAAxkBAAIBm2Z..."
+ * Fluxo:
+ *   Front → POST /upload → API intermediária → sendAudio/sendVideo → Telegram
+ *   Front → GET  /play/:file_id → API intermediária → getFile → stream
+ *   Front → GET  /catalog → API intermediária → catálogo local (DB/JSON)
  */
 
-// Em dev, aponta para o servidor local. Em produção, troque pelo domínio real.
-const TELEGRAM_API_BASE =
-  import.meta.env.VITE_TELEGRAM_API_URL ?? 'http://localhost:3001';
+const BASE =
+  (import.meta as any).env?.VITE_TELEGRAM_API_BASE ?? "http://localhost:3001";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipos
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type TelegramMediaMeta = {
   /** file_id retornado pelo Telegram após upload */
   file_id: string;
-  /** message_id da mensagem onde o arquivo foi enviado */
+  /** message_id da mensagem no canal/grupo de storage */
   message_id: number;
-  /** chat_id do canal/chat usado como storage */
+  /** chat_id do canal/grupo de storage */
   chat_id: string;
-  /** MIME type do arquivo (audio/mpeg, video/mp4, etc.) */
   mime_type: string;
-  /** Tamanho em bytes */
   file_size: number;
-  /** Duração em segundos (áudio/vídeo) */
   duration?: number;
-  /** Metadados editoriais */
   titulo?: string;
   artista?: string;
+  /** Drive file-id ou URL pública para a capa */
   capa?: string;
-  categoria?: 'musica' | 'musicvideo' | 'video';
+  categoria?: "musica" | "musicvideo" | "video";
+  /** Timestamp ISO de quando foi enviado */
+  created_at?: string;
 };
 
-export type UploadResult = {
-  ok: boolean;
-  meta?: TelegramMediaMeta;
-  error?: string;
-};
+export type UploadResult =
+  | { ok: true; meta: TelegramMediaMeta }
+  | { ok: false; error: string };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Stream URL
-// ─────────────────────────────────────────────────────────────────────────────
+export type CatalogResult =
+  | { ok: true; items: TelegramMediaMeta[] }
+  | { ok: false; error: string };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Retorna a URL de stream para um file_id do Telegram.
- * A API intermediária resolve getFile e faz proxy do conteúdo.
+ * Usado pelo MiniPlayer como src do <audio>.
  *
- * Uso no MiniPlayer: ao detectar mediaType === "telegram",
- * usar esta função para obter a src do <audio>.
- *
- * Nota: no Bot API cloud, getFile gera link válido por ≥1h
- * com limite de download de 20 MB. Para arquivos maiores,
- * use o Local Bot API Server em --local.
+ * audioSrc aceita:
+ *   - "tg:BQACAgIA..."     → prefixo canônico
+ *   - "tg_file:BQACAgIA..." → prefixo alternativo
+ *   - "BQACAgIA..."         → file_id puro (sem prefixo)
  */
-export function telegramStreamUrl(fileId: string): string {
-  const id = fileId.startsWith('tg:') ? fileId.slice(3) : fileId;
-  return `${TELEGRAM_API_BASE}/play/${encodeURIComponent(id)}`;
+export function telegramStreamUrl(audioSrc: string): string {
+  const id = audioSrc
+    .replace(/^tg_file:/, "")
+    .replace(/^tg:/, "");
+  return `${BASE}/play/${encodeURIComponent(id)}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Upload
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── API calls ────────────────────────────────────────────────────────────────
 
 /**
  * Faz upload de um arquivo de mídia para o Telegram via API intermediária.
- *
- * A API intermediária:
- *  1. Recebe o arquivo via multipart/form-data
- *  2. Envia para o bot Telegram (sendAudio / sendVideo)
- *  3. Persiste file_id, message_id, chat_id, MIME, tamanho e duração
- *  4. Retorna o TelegramMediaMeta completo
- *
- * Para o audioSrc do PlayItem, use: `tg:${meta.file_id}`
+ * A API salva o file_id, message_id, chat_id e metadados no catálogo.
  */
 export async function uploadToTelegram(
   file: File,
-  meta: Partial<Omit<TelegramMediaMeta, 'file_id' | 'message_id' | 'chat_id' | 'file_size'>>
+  meta: Partial<Omit<TelegramMediaMeta, "file_id" | "message_id" | "chat_id">>
 ): Promise<UploadResult> {
-  const form = new FormData();
-  form.append('file', file);
-  form.append('meta', JSON.stringify(meta));
-
   try {
-    const res = await fetch(`${TELEGRAM_API_BASE}/upload`, {
-      method: 'POST',
+    const form = new FormData();
+    form.append("file", file);
+    form.append("meta", JSON.stringify(meta));
+
+    const res = await fetch(`${BASE}/upload`, {
+      method: "POST",
       body: form,
     });
+
     if (!res.ok) {
-      const err = await res.text();
-      return { ok: false, error: err };
+      const text = await res.text();
+      return { ok: false, error: `HTTP ${res.status}: ${text}` };
     }
+
     const data = await res.json();
-    return { ok: true, meta: data };
+    return { ok: true, meta: data as TelegramMediaMeta };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Catálogo
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Retorna o catálogo completo de mídias armazenadas no Telegram.
- * O catálogo é persistido pela API intermediária (não no Telegram).
- * Telegram é apenas storage — metadados ficam no banco da API.
+ * Busca o catálogo completo de mídias armazenadas no Telegram.
+ * Retornado pela API intermediária (não pelo Bot API diretamente).
  */
-export async function getTelegramCatalog(): Promise<TelegramMediaMeta[]> {
+export async function getTelegramCatalog(): Promise<CatalogResult> {
   try {
-    const res = await fetch(`${TELEGRAM_API_BASE}/catalog`);
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
+    const res = await fetch(`${BASE}/catalog`);
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { ok: true, items: data as TelegramMediaMeta[] };
+  } catch (e) {
+    return { ok: false, error: String(e) };
   }
 }
 
 /**
- * Busca metadados de um único item pelo file_id.
+ * Deleta uma mídia do catálogo (não apaga do Telegram — só remove o registro).
  */
-export async function getTelegramItem(fileId: string): Promise<TelegramMediaMeta | null> {
+export async function deleteTelegramMedia(file_id: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const id = fileId.startsWith('tg:') ? fileId.slice(3) : fileId;
-    const res = await fetch(`${TELEGRAM_API_BASE}/catalog/${encodeURIComponent(id)}`);
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
+    const res = await fetch(`${BASE}/catalog/${encodeURIComponent(file_id)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
   }
 }
