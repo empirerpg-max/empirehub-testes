@@ -2,16 +2,15 @@
  * MiniPlayer — player de áudio/vídeo background.
  *
  * Suporta três tipos de mídia:
- * ─ Google Drive → <audio> nativo com crossOrigin="anonymous"
- * ─ YouTube      → YT.Player injetado em <div> de 1x1px invisível
- * ─ Telegram     → <audio> nativo (igual ao Drive) com src vindo
- *                   da API intermediária (telegramStreamUrl)
  *
- * Regra de autoPlay (idêntica ao oficial):
- *   1. onClick → play(item, queue, { autoPlay: true })
- *   2. playContext seta playing:true imediatamente
- *   3. useEffect [currentMediaId] → configura src / carrega (sem play)
- *   4. useEffect [currentMediaId, playing] → vê playing:true → chama triggerPlay()
+ * ─ Google Drive  → <audio> nativo via proxy Cloudflare Worker
+ * ─ YouTube       → YT.Player injetado em div 1×1 invisível
+ * ─ Telegram      → <audio> nativo via API intermediária (/play/:fileId)
+ *                   Mesmo fluxo do Drive, URL diferente.
+ *
+ * Para adicionar Telegram, os únicos pontos modificados em relação
+ * ao original são os efeitos 3, 4 e triggerPlay — tratando
+ * "telegram" igual a "drive" (ambos usam <audio> nativo).
  */
 
 import { useEffect, useRef, useCallback } from "react";
@@ -22,12 +21,22 @@ import {
   telegramStreamUrl,
   detectMediaType,
   extractYouTubeId,
+  extractDriveId,
+  extractTelegramFileId,
 } from "@/lib/playContext";
 import { ChevronLeft, ChevronRight, X, Music } from "lucide-react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// YT API type shim
-// ─────────────────────────────────────────────────────────────────────────────
+// Thumb do Drive para capa
+function driveImg(capa: string, size = 80): string {
+  if (!capa) return "";
+  const id =
+    capa.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1] ||
+    capa.match(/id=([a-zA-Z0-9_-]+)/)?.[1] ||
+    (!/^https?:\/\//.test(capa) && !capa.includes("/") ? capa : null);
+  if (id) return `https://lh3.googleusercontent.com/d/${id}=w${size}`;
+  return capa;
+}
+
 declare global {
   interface Window {
     YT: {
@@ -38,13 +47,9 @@ declare global {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hook: carrega YT IFrame API uma única vez
-// ─────────────────────────────────────────────────────────────────────────────
 function useLoadYTApi(onReady: () => void) {
   const cbRef = useRef(onReady);
   cbRef.current = onReady;
-
   useEffect(() => {
     if (window.YT?.Player) { cbRef.current(); return; }
     const prev = window.onYouTubeIframeAPIReady;
@@ -58,9 +63,17 @@ function useLoadYTApi(onReady: () => void) {
   }, []);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MiniPlayer
-// ─────────────────────────────────────────────────────────────────────────────
+/** Resolve a URL de stream dado o audioSrc e o mediaType */
+function resolveStreamUrl(audioSrc: string, mediaType: string): string {
+  if (mediaType === "telegram") {
+    const id = extractTelegramFileId(audioSrc) ?? audioSrc;
+    return telegramStreamUrl(id);
+  }
+  // drive (default)
+  const id = extractDriveId(audioSrc) ?? audioSrc;
+  return driveStreamUrl(id);
+}
+
 export function MiniPlayer() {
   const {
     state,
@@ -85,7 +98,7 @@ export function MiniPlayer() {
   const ytActiveId = useRef<string | null>(null);
   const pendingPlay = useRef(false);
 
-  // ── 1. Cria o <audio> nativo uma única vez ────────────────────────────────
+  // ── 1. Cria o <audio> nativo uma única vez ───────────────────────────────
   useEffect(() => {
     if (audioRef.current) return;
     const audio = new Audio();
@@ -98,13 +111,13 @@ export function MiniPlayer() {
       const err = (e.target as HTMLAudioElement).error;
       console.error("[MiniPlayer] Erro de áudio:", err?.code, err?.message);
       confirmPaused();
-      toast.error("Não foi possível carregar a mídia. Verifique se o arquivo está público.");
+      toast.error("Não foi possível carregar a mídia. Verifique se o arquivo está acessível.");
     });
     audioRef.current = audio;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 2. Cria / recria o YT.Player ─────────────────────────────────────────
+  // ── 2. Cria / recria o YT.Player ────────────────────────────────────────
   const buildYTPlayer = useCallback(
     (videoId: string, autoStart: boolean) => {
       if (!ytContainerRef.current) return;
@@ -150,29 +163,20 @@ export function MiniPlayer() {
 
   useLoadYTApi(onYTApiReady);
 
-  // ── 3. Reage à troca de faixa — configura src, NÃO inicia reprodução ────
+  // ── 3. Troca de faixa — configura src (Drive, Telegram ou YouTube) ───────
   useEffect(() => {
     if (!currentMediaId) return;
+    const item = currentIdx !== null ? queue[currentIdx] : null;
+    if (!item) return;
 
-    // Drive: src direto via proxy Cloudflare Worker
-    if (mediaType === "drive") {
+    if (mediaType === "drive" || mediaType === "telegram") {
       const audio = audioRef.current;
       if (!audio) return;
       audio.pause();
-      audio.src = driveStreamUrl(currentMediaId);
+      audio.src = resolveStreamUrl(item.audioSrc, mediaType);
       audio.load();
     }
 
-    // Telegram: src via API intermediária (mesmo fluxo do Drive)
-    if (mediaType === "telegram") {
-      const audio = audioRef.current;
-      if (!audio) return;
-      audio.pause();
-      audio.src = telegramStreamUrl("tg:" + currentMediaId);
-      audio.load();
-    }
-
-    // YouTube: delega para buildYTPlayer
     if (mediaType === "youtube") {
       if (!ytApiReady.current) return;
       if (ytActiveId.current !== currentMediaId) {
@@ -182,22 +186,21 @@ export function MiniPlayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMediaId, mediaType]);
 
-  // ── 4. Auto-play quando playing é true ───────────────────────────────
+  // ── 4. Auto-play quando playing=true ────────────────────────────────────
   useEffect(() => {
     if (!currentMediaId || !playing) return;
     const id = setTimeout(() => {
-      // Drive ou Telegram: usa o mesmo <audio>
       if (mediaType === "drive" || mediaType === "telegram") {
-        audioRef.current?.play().catch(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+        audio.play().catch(() => {
           confirmPaused();
-          toast.error("Falha ao reproduzir. O arquivo pode estar privado ou o navegador bloqueou o autoplay.");
+          toast.error("Falha ao reproduzir. O arquivo pode estar privado ou o autoplay foi bloqueado.");
         });
       }
-      // YouTube: usa YT.Player
       if (mediaType === "youtube") {
         if (ytPlayerRef.current) {
-          try { ytPlayerRef.current.playVideo(); }
-          catch { pendingPlay.current = true; }
+          try { ytPlayerRef.current.playVideo(); } catch { pendingPlay.current = true; }
         } else {
           pendingPlay.current = true;
           if (ytApiReady.current && currentMediaId) buildYTPlayer(currentMediaId, true);
@@ -208,16 +211,18 @@ export function MiniPlayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMediaId, playing]);
 
-  // ── 5. Limpa ao desmontar ──────────────────────────────────────────
+  // ── 5. Cleanup ───────────────────────────────────────────────────────────
   useEffect(() => {
     return () => { audioRef.current?.pause(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── 6. triggerPlay (user-gesture garantido) ──────────────────────
+  // ── 6. triggerPlay (com user-gesture) ───────────────────────────────────
   const triggerPlay = useCallback(() => {
     if (mediaType === "drive" || mediaType === "telegram") {
-      audioRef.current?.play().catch(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.play().catch(() => {
         confirmPaused();
         toast.error("Falha ao reproduzir. Verifique se o arquivo está acessível.");
       });
@@ -225,8 +230,7 @@ export function MiniPlayer() {
     }
     if (mediaType === "youtube") {
       if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.playVideo(); }
-        catch { pendingPlay.current = true; }
+        try { ytPlayerRef.current.playVideo(); } catch { pendingPlay.current = true; }
       } else {
         pendingPlay.current = true;
         if (ytApiReady.current && currentMediaId) buildYTPlayer(currentMediaId, true);
@@ -234,13 +238,11 @@ export function MiniPlayer() {
     }
   }, [mediaType, audioRef, ytPlayerRef, currentMediaId, buildYTPlayer, confirmPaused]);
 
-  // ── 7. triggerPause ──────────────────────────────────────────────
   const triggerPause = useCallback(() => {
     pendingPlay.current = false;
     pause();
   }, [pause]);
 
-  // ── Guard ───────────────────────────────────────────────────────────────
   if (currentIdx === null || queue.length === 0) return null;
 
   const item = queue[currentIdx];
@@ -252,9 +254,14 @@ export function MiniPlayer() {
     else { resume(); triggerPlay(); }
   };
 
+  // Badge do tipo de mídia (visual de debug — remover em produção)
+  const mediaBadge =
+    mediaType === "telegram" ? "📨 TG" :
+    mediaType === "youtube"  ? "▶️ YT" :
+    mediaType === "drive"    ? "💿 DR" : null;
+
   return (
     <div className="fixed bottom-16 inset-x-0 z-40 bg-card border-t border-white/10 shadow-2xl">
-      {/* Container YT — NUNCA display:none nem size 0 */}
       {mediaType === "youtube" && (
         <div
           style={{ position: "absolute", top: 0, left: 0, width: 1, height: 1,
@@ -269,7 +276,7 @@ export function MiniPlayer() {
         {/* Capa */}
         <div className="size-10 rounded-lg overflow-hidden bg-primary/10 flex-shrink-0">
           {item.capa ? (
-            <img src={item.capa} alt={item.titulo}
+            <img src={driveImg(item.capa, 80)} alt={item.titulo}
               className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="w-full h-full grid place-items-center">
@@ -280,20 +287,19 @@ export function MiniPlayer() {
 
         {/* Info */}
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-black truncate uppercase tracking-tight">{item.titulo}</p>
-          <p className="text-[10px] text-muted-foreground truncate">
-            {item.artista}
-            {mediaType === "telegram" && (
-              <span className="ml-1 text-[9px] opacity-50">✈️ TG</span>
+          <p className="text-xs font-black truncate uppercase tracking-tight">
+            {item.titulo}
+            {mediaBadge && (
+              <span className="ml-2 text-[9px] opacity-40 font-mono normal-case">{mediaBadge}</span>
             )}
           </p>
+          <p className="text-[10px] text-muted-foreground truncate">{item.artista}</p>
         </div>
 
         {/* Controles */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => { prev(); }}
-            disabled={!hasPrev}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity"
+          <button onClick={() => prev()} disabled={!hasPrev}
+            className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity"
             aria-label="Anterior">
             <ChevronLeft className="size-4" />
           </button>
@@ -313,15 +319,14 @@ export function MiniPlayer() {
             )}
           </button>
 
-          <button onClick={() => { next(); }}
-            disabled={!hasNext}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity"
+          <button onClick={() => next()} disabled={!hasNext}
+            className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity"
             aria-label="Próxima">
             <ChevronRight className="size-4" />
           </button>
 
           <button onClick={close}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground ml-1"
+            className="size-8 grid place-items-center text-muted-foreground ml-1"
             aria-label="Fechar player">
             <X className="size-4" />
           </button>

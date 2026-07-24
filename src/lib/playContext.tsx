@@ -11,7 +11,7 @@ import {
 // Tipos
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** "telegram" = mídia armazenada no Telegram, servida via API intermediária */
+/** "telegram" = arquivo hospedado via API intermediária Telegram */
 export type MediaType = "drive" | "youtube" | "telegram";
 
 export type PlayItem = {
@@ -20,8 +20,9 @@ export type PlayItem = {
   artista: string;
   capa: string;
   /**
-   * Drive file-id puro OU YouTube video-id puro (11 chars) ou URL completa.
-   * Para Telegram: prefixo "tg:" + file_id  (ex: "tg:BQACAgIA...")
+   * Drive file-id puro        → detectado como "drive"
+   * YouTube video-id (11 ch)  → detectado como "youtube"
+   * "tg:<file_id>"            → detectado como "telegram"
    */
   audioSrc: string;
   letra?: string;
@@ -56,7 +57,7 @@ type PlayContextType = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers de extração / detecção de ID
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function extractDriveId(str: string): string | null {
@@ -84,15 +85,11 @@ export function extractYouTubeId(str: string): string | null {
   return null;
 }
 
-/**
- * Extrai o file_id limpo de um audioSrc do Telegram.
- * Aceita: "tg:BQACAgIA..." ou "tg_file:BQACAgIA..." ou o file_id puro.
- */
+/** Remove prefixo "tg:" ou "tg_file:" e retorna o file_id puro */
 export function extractTelegramFileId(str: string): string | null {
   if (!str) return null;
-  const s = str.trim();
-  if (s.startsWith("tg:")) return s.slice(3);
-  if (s.startsWith("tg_file:")) return s.slice(8);
+  if (str.startsWith("tg:")) return str.slice(3);
+  if (str.startsWith("tg_file:")) return str.slice(8);
   return null;
 }
 
@@ -108,17 +105,14 @@ export function detectMediaType(audioSrc: string): MediaType {
     s.includes("youtube") ||
     s.includes("youtu.be") ||
     /^[a-zA-Z0-9_-]{11}$/.test(s)
-  ) {
-    return "youtube";
-  }
+  ) return "youtube";
 
-  // Drive — fallback
+  // Drive (default)
   return "drive";
 }
 
 /**
- * URL de stream do Google Drive via proxy Cloudflare Worker.
- * Comportamento idêntico ao app oficial.
+ * Stream do Google Drive via proxy Cloudflare Worker.
  */
 export function driveStreamUrl(idOrUrl: string): string {
   const id = extractDriveId(idOrUrl) ?? idOrUrl;
@@ -126,15 +120,13 @@ export function driveStreamUrl(idOrUrl: string): string {
 }
 
 /**
- * URL de stream de mídia do Telegram via API intermediária local.
- * Em produção: troque TELEGRAM_API_BASE pela URL do seu servidor.
+ * Stream do Telegram via API intermediária local/produção.
+ * O front NUNCA fala diretamente com o Bot API.
  */
-const TELEGRAM_API_BASE =
-  (import.meta as any).env?.VITE_TELEGRAM_API_BASE ?? "http://localhost:3001";
-
-export function telegramStreamUrl(fileIdOrSrc: string): string {
-  const id = extractTelegramFileId(fileIdOrSrc) ?? fileIdOrSrc;
-  return `${TELEGRAM_API_BASE}/play/${encodeURIComponent(id)}`;
+export function telegramStreamUrl(fileId: string): string {
+  const id = extractTelegramFileId(fileId) ?? fileId;
+  const base = import.meta.env.VITE_TELEGRAM_API_BASE ?? "http://localhost:3001";
+  return `${base}/play/${id}`;
 }
 
 /** @deprecated use driveStreamUrl */
@@ -201,7 +193,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const pause = useCallback(() => {
     if (audioRef.current) audioRef.current.pause();
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.pauseVideo(); } catch { /* YT não iniciado */ }
+      try { ytPlayerRef.current.pauseVideo(); } catch { /* */ }
     }
     setState((s) => ({ ...s, playing: false }));
   }, []);

@@ -1,26 +1,29 @@
 [
   {
     "id": "mock-video-1",
-    "titulo": "Empire Intro",
-    "artista": "Empire Studio",
-    "capa": "",
-    "audioSrc": "dQw4w9WgXcQ",
-    "categoria": "musicvideo"
+    "Tipo de Clipe": "Clipe Oficial",
+    "ACT Principal": "Lana Empire",
+    "Thumb": "",
+    "ID do arquivo": "dQw4w9WgXcQ",
+    "Data de lançamento": "10/06/2025",
+    "ID do tópico": "mock-video-1"
   },
   {
     "id": "mock-video-2",
-    "titulo": "City Lights",
-    "artista": "Neon Crew",
-    "capa": "",
-    "audioSrc": "dQw4w9WgXcQ",
-    "categoria": "musicvideo"
+    "Tipo de Clipe": "Live Session",
+    "ACT Principal": "Zeon Records",
+    "Thumb": "",
+    "ID do arquivo": "9bZkp7q19f0",
+    "Data de lançamento": "01/07/2025",
+    "ID do tópico": "mock-video-2"
   },
   {
     "id": "mock-video-3",
-    "titulo": "Deep Signal",
-    "artista": "Frequency Lab",
-    "capa": "",
-    "audioSrc": "dQw4w9WgXcQ",
-    "categoria": "video"
+    "Tipo de Clipe": "Lyric Video [TG MOCK]",
+    "ACT Principal": "Empire Storage",
+    "Thumb": "",
+    "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockVideoId001",
+    "Data de lançamento": "20/07/2026",
+    "ID do tópico": "mock-video-3"
   }
 ]

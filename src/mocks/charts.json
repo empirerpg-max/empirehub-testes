@@ -1,35 +1,19 @@
-[
-  {
-    "id": "chart-1",
-    "nome": "Empire Top 5 — Semana",
-    "entradas": [
-      { "posicao": 1, "itemId": "mock-musica-1", "titulo": "Neon Dust", "artista": "Empire Artists" },
-      { "posicao": 2, "itemId": "mock-musica-2", "titulo": "Midnight Protocol", "artista": "Dark Circuit" },
-      { "posicao": 3, "itemId": "mock-musica-3", "titulo": "Signal Lost", "artista": "Void Wave" },
-      { "posicao": 4, "itemId": "mock-musica-4", "titulo": "Telegram Test Track", "artista": "Bot Storage" },
-      { "posicao": 5, "itemId": "mock-musica-5", "titulo": "Drive Audio Sample", "artista": "Cloud Files" }
-    ]
-  },
-  {
-    "id": "chart-2",
-    "nome": "Empire Clipes — Mês",
-    "entradas": [
-      { "posicao": 1, "itemId": "mock-video-1", "titulo": "Empire Intro", "artista": "Empire Studio" },
-      { "posicao": 2, "itemId": "mock-video-2", "titulo": "City Lights", "artista": "Neon Crew" },
-      { "posicao": 3, "itemId": "mock-video-3", "titulo": "Deep Signal", "artista": "Frequency Lab" },
-      { "posicao": 4, "itemId": "mock-musica-1", "titulo": "Neon Dust", "artista": "Empire Artists" },
-      { "posicao": 5, "itemId": "mock-musica-2", "titulo": "Midnight Protocol", "artista": "Dark Circuit" }
-    ]
-  },
-  {
-    "id": "chart-3",
-    "nome": "Empire Geral",
-    "entradas": [
-      { "posicao": 1, "itemId": "mock-musica-2", "titulo": "Midnight Protocol", "artista": "Dark Circuit" },
-      { "posicao": 2, "itemId": "mock-video-1", "titulo": "Empire Intro", "artista": "Empire Studio" },
-      { "posicao": 3, "itemId": "mock-musica-4", "titulo": "Telegram Test Track", "artista": "Bot Storage" },
-      { "posicao": 4, "itemId": "mock-musica-3", "titulo": "Signal Lost", "artista": "Void Wave" },
-      { "posicao": 5, "itemId": "mock-video-2", "titulo": "City Lights", "artista": "Neon Crew" }
-    ]
-  }
-]
+{
+  "spotify": [
+    { "Posição": "1", "Nome da música": "Ascensão", "Capa da música": "", "ID do tópico": "mock-musica-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
+    { "Posição": "2", "Nome da música": "Coroa de Ouro", "Capa da música": "", "ID do tópico": "mock-musica-2", "ID do arquivo": "9bZkp7q19f0", "ID do criador": "Zeon Records" },
+    { "Posição": "3", "Nome da música": "Império", "Capa da música": "", "ID do tópico": "mock-musica-3", "ID do arquivo": "kJQP7kiw5Fk", "ID do criador": "Nova Era" },
+    { "Posição": "4", "Nome da música": "Hall of Fame", "Capa da música": "", "ID do tópico": "mock-musica-5", "ID do arquivo": "hT_nvWreIhg", "ID do criador": "Dynasty" },
+    { "Posição": "5", "Nome da música": "Telegram Beat", "Capa da música": "", "ID do tópico": "mock-musica-4", "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockFileId001", "ID do criador": "Empire Storage" }
+  ],
+  "apple": [
+    { "Posição": "1", "Nome da música": "Hall of Fame", "Capa da música": "", "ID do tópico": "mock-musica-5", "ID do arquivo": "hT_nvWreIhg", "ID do criador": "Dynasty" },
+    { "Posição": "2", "Nome da música": "Ascensão", "Capa da música": "", "ID do tópico": "mock-musica-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
+    { "Posição": "3", "Nome da música": "Império", "Capa da música": "", "ID do tópico": "mock-musica-3", "ID do arquivo": "kJQP7kiw5Fk", "ID do criador": "Nova Era" }
+  ],
+  "youtube": [
+    { "Posição": "1", "Nome do vídeo": "Lana Empire - Ascensão (Clipe Oficial)", "Thumb": "", "ID do tópico": "mock-video-1", "ID do arquivo": "dQw4w9WgXcQ", "ID do criador": "Lana Empire" },
+    { "Posição": "2", "Nome do vídeo": "Zeon Records - Coroa de Ouro (Live)", "Thumb": "", "ID do tópico": "mock-video-2", "ID do arquivo": "9bZkp7q19f0", "ID do criador": "Zeon Records" },
+    { "Posição": "3", "Nome do vídeo": "Empire Storage - Telegram Beat (Lyric)", "Thumb": "", "ID do tópico": "mock-video-3", "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockVideoId001", "ID do criador": "Empire Storage" }
+  ]
+}

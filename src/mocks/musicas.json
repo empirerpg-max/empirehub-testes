@@ -1,42 +1,52 @@
 [
   {
     "id": "mock-musica-1",
-    "titulo": "Neon Dust",
-    "artista": "Empire Artists",
-    "capa": "",
-    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
-    "categoria": "musica"
+    "Nome da música": "Ascensão",
+    "ACT Principal": "Lana Empire",
+    "Capa da música": "",
+    "ID do arquivo": "dQw4w9WgXcQ",
+    "Letra": "Subindo ao topo, esse é o meu destino...",
+    "Data de lançamento": "10/06/2025",
+    "ID do tópico": "mock-musica-1"
   },
   {
     "id": "mock-musica-2",
-    "titulo": "Midnight Protocol",
-    "artista": "Dark Circuit",
-    "capa": "",
-    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
-    "categoria": "musica"
+    "Nome da música": "Coroa de Ouro",
+    "ACT Principal": "Zeon Records",
+    "Capa da música": "",
+    "ID do arquivo": "9bZkp7q19f0",
+    "Letra": "",
+    "Data de lançamento": "01/07/2025",
+    "ID do tópico": "mock-musica-2"
   },
   {
     "id": "mock-musica-3",
-    "titulo": "Signal Lost",
-    "artista": "Void Wave",
-    "capa": "",
-    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
-    "categoria": "musica"
+    "Nome da música": "Império",
+    "ACT Principal": "Nova Era",
+    "Capa da música": "",
+    "ID do arquivo": "kJQP7kiw5Fk",
+    "Letra": "",
+    "Data de lançamento": "15/07/2026",
+    "ID do tópico": "mock-musica-3"
   },
   {
     "id": "mock-musica-4",
-    "titulo": "Telegram Test Track",
-    "artista": "Bot Storage",
-    "capa": "",
-    "audioSrc": "tg:BQACAgIAAxkBAAIBf2Y0000000000000000PLACEHOLDER",
-    "categoria": "musica"
+    "Nome da música": "Telegram Beat [MOCK TG]",
+    "ACT Principal": "Empire Storage",
+    "Capa da música": "",
+    "ID do arquivo": "tg:BQACAgIAAxkBAAIBZmockFileId001",
+    "Letra": "",
+    "Data de lançamento": "20/07/2026",
+    "ID do tópico": "mock-musica-4"
   },
   {
     "id": "mock-musica-5",
-    "titulo": "Drive Audio Sample",
-    "artista": "Cloud Files",
-    "capa": "",
-    "audioSrc": "1BxfqEiDpAZlRkHFT3kFZsHbDxA0TXvgE",
-    "categoria": "musica"
+    "Nome da música": "Hall of Fame",
+    "ACT Principal": "Dynasty",
+    "Capa da música": "",
+    "ID do arquivo": "hT_nvWreIhg",
+    "Letra": "",
+    "Data de lançamento": "05/05/2025",
+    "ID do tópico": "mock-musica-5"
   }
 ]
