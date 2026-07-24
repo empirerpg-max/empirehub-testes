@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   Loader2,
   X,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { usePlay, type PlayItem } from "@/lib/playContext";
 
@@ -751,6 +753,330 @@ function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => vo
   );
 }
 
+// ─── Formulário de Lançamento ─────────────────────────────────────────────
+type FonteMidia = "youtube" | "drive" | "telegram" | "outra";
+type StatusForm = "idle" | "loading" | "success" | "error";
+
+const FONTE_CONFIG: Record<FonteMidia, { label: string; placeholder: string; hint: string }> = {
+  youtube: {
+    label: "URL ou ID do YouTube",
+    placeholder: "https://www.youtube.com/watch?v=... ou dQw4w9WgXcQ",
+    hint: "Cole o link completo do YouTube ou apenas o ID do vídeo.",
+  },
+  drive: {
+    label: "URL ou ID do Google Drive",
+    placeholder: "https://drive.google.com/file/d/... ou 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs",
+    hint: "Cole o link de compartilhamento ou o ID do arquivo no Drive.",
+  },
+  telegram: {
+    label: "file_id do Telegram",
+    placeholder: "BQACAgIAAxkBAAI...",
+    hint: "Cole o file_id retornado pelo bot do Telegram.",
+  },
+  outra: {
+    label: "URL da mídia",
+    placeholder: "https://...",
+    hint: "Cole a URL direta da mídia.",
+  },
+};
+
+interface FormLancarState {
+  titulo: string;
+  tipoSingle: string;
+  tipoMusica: string;
+  artistas: string[];
+  substituir: "Sim" | "Nao" | "";
+  musicaSubstituida: string;
+  fonte: FonteMidia;
+  urlOuFileId: string;
+}
+
+const FORM_INITIAL: FormLancarState = {
+  titulo: "",
+  tipoSingle: "",
+  tipoMusica: "",
+  artistas: [""],
+  substituir: "",
+  musicaSubstituida: "",
+  fonte: "youtube",
+  urlOuFileId: "",
+};
+
+function LancarTab() {
+  const [form, setForm] = useState<FormLancarState>(FORM_INITIAL);
+  const [status, setStatus] = useState<StatusForm>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const set = <K extends keyof FormLancarState>(key: K, val: FormLancarState[K]) =>
+    setForm((prev) => ({ ...prev, [key]: val }));
+
+  const setArtista = (idx: number, val: string) =>
+    setForm((prev) => {
+      const next = [...prev.artistas];
+      next[idx] = val;
+      return { ...prev, artistas: next };
+    });
+
+  const addArtista = () =>
+    setForm((prev) => ({ ...prev, artistas: [...prev.artistas, ""] }));
+
+  const removeArtista = (idx: number) =>
+    setForm((prev) => ({
+      ...prev,
+      artistas: prev.artistas.length > 1 ? prev.artistas.filter((_, i) => i !== idx) : prev.artistas,
+    }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("loading");
+    setErrorMsg("");
+
+    const artistas = form.artistas.map((a) => a.trim()).filter(Boolean);
+
+    const payload = {
+      action: "gravarMusica",
+      titulo: form.titulo.trim(),
+      tipoSingle: form.tipoSingle,
+      tipoMusica: form.tipoMusica,
+      artistas,
+      substituir: form.substituir,
+      musicaSubstituida: form.substituir === "Sim" ? form.musicaSubstituida.trim() : "",
+      fonte: form.fonte,
+      urlOuFileId: form.urlOuFileId.trim(),
+    };
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data?.success || data?.status === "ok") {
+        setStatus("success");
+        setForm(FORM_INITIAL);
+      } else {
+        throw new Error(data?.message || data?.error || "Resposta inesperada do servidor.");
+      }
+    } catch (err: unknown) {
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const inputCls =
+    "w-full bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/[0.04] transition-all";
+
+  const labelCls = "block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5";
+
+  const selectCls =
+    "w-full bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 focus:bg-primary/[0.04] transition-all appearance-none";
+
+  if (status === "success") {
+    return (
+      <div className="flex flex-col items-center justify-center gap-5 py-12 text-center">
+        <div className="size-16 rounded-full bg-primary/10 border border-primary/20 grid place-items-center">
+          <CheckCircle2 className="size-8 text-primary" />
+        </div>
+        <div>
+          <p className="text-sm font-black uppercase tracking-widest">Lançamento enviado!</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Sua música foi registrada com sucesso.</p>
+        </div>
+        <button
+          onClick={() => setStatus("idle")}
+          className="px-6 py-2.5 rounded-2xl bg-primary/10 border border-primary/20 text-[11px] font-black uppercase tracking-widest text-primary active:bg-primary/20 transition-all"
+        >
+          Lançar outra
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5 pb-6">
+      <div className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-[1.5rem]">
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">📝 Cadastrar Música</p>
+        <p className="text-[11px] text-muted-foreground/60">Preencha os dados do lançamento. Será registrado via Empire GAS.</p>
+      </div>
+
+      {/* Título */}
+      <div>
+        <label className={labelCls}>Título da música *</label>
+        <input
+          required
+          type="text"
+          value={form.titulo}
+          onChange={(e) => set("titulo", e.target.value)}
+          placeholder="Nome do lançamento"
+          className={inputCls}
+        />
+      </div>
+
+      {/* Tipo Single / Tipo Música */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Tipo de single</label>
+          <select value={form.tipoSingle} onChange={(e) => set("tipoSingle", e.target.value)} className={selectCls}>
+            <option value="">Selecione…</option>
+            <option value="Single">Single</option>
+            <option value="EP">EP</option>
+            <option value="Album">Álbum</option>
+            <option value="Mixtape">Mixtape</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Tipo de música</label>
+          <select value={form.tipoMusica} onChange={(e) => set("tipoMusica", e.target.value)} className={selectCls}>
+            <option value="">Selecione…</option>
+            <option value="Original">Original</option>
+            <option value="Cover">Cover</option>
+            <option value="Remix">Remix</option>
+            <option value="Instrumental">Instrumental</option>
+            <option value="Acustico">Acústico</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Artistas */}
+      <div>
+        <label className={labelCls}>Artistas *</label>
+        <div className="space-y-2">
+          {form.artistas.map((art, idx) => (
+            <div key={idx} className="flex gap-2">
+              <input
+                required={idx === 0}
+                type="text"
+                value={art}
+                onChange={(e) => setArtista(idx, e.target.value)}
+                placeholder={idx === 0 ? "ACT principal" : "Feat / collab"}
+                className={`${inputCls} flex-1`}
+              />
+              {form.artistas.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeArtista(idx)}
+                  className="size-11 flex-shrink-0 rounded-2xl bg-white/[0.04] border border-white/[0.08] grid place-items-center text-muted-foreground active:text-red-400 active:border-red-400/30 transition-all"
+                  aria-label="Remover artista"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addArtista}
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors py-1"
+          >
+            <Plus className="size-3.5" /> Adicionar feat
+          </button>
+        </div>
+      </div>
+
+      {/* Substituir */}
+      <div>
+        <label className={labelCls}>Esta música substitui outra?</label>
+        <div className="grid grid-cols-3 gap-2">
+          {([["", "Não sei"], ["Nao", "Não"], ["Sim", "Sim"]] as [string, string][]).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => set("substituir", val as FormLancarState["substituir"])}
+              className={`py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                form.substituir === val
+                  ? "bg-primary/10 border-primary/40 text-primary"
+                  : "bg-white/[0.03] border-white/[0.06] text-muted-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Música Substituída — só aparece se substituir=Sim */}
+      {form.substituir === "Sim" && (
+        <div>
+          <label className={labelCls}>Nome da música substituída *</label>
+          <input
+            required
+            type="text"
+            value={form.musicaSubstituida}
+            onChange={(e) => set("musicaSubstituida", e.target.value)}
+            placeholder="Título exato da música anterior"
+            className={inputCls}
+          />
+        </div>
+      )}
+
+      {/* Fonte de mídia */}
+      <div>
+        <label className={labelCls}>Fonte da mídia *</label>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {(["youtube", "drive", "telegram", "outra"] as FonteMidia[]).map((f) => {
+            const icons: Record<FonteMidia, string> = { youtube: "▶", drive: "◈", telegram: "✈", outra: "⊕" };
+            return (
+              <button
+                key={f}
+                type="button"
+                onClick={() => { set("fonte", f); set("urlOuFileId", ""); }}
+                className={`flex flex-col items-center gap-1 py-2.5 rounded-2xl border text-[9px] font-black uppercase tracking-widest transition-all ${
+                  form.fonte === f
+                    ? "bg-primary/10 border-primary/40 text-primary"
+                    : "bg-white/[0.03] border-white/[0.06] text-muted-foreground"
+                }`}
+              >
+                <span className="text-base">{icons[f]}</span>
+                {f === "outra" ? "Outra" : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            );
+          })}
+        </div>
+        <div>
+          <label className={labelCls}>{FONTE_CONFIG[form.fonte].label} *</label>
+          <input
+            required
+            type="text"
+            value={form.urlOuFileId}
+            onChange={(e) => set("urlOuFileId", e.target.value)}
+            placeholder={FONTE_CONFIG[form.fonte].placeholder}
+            className={inputCls}
+          />
+          <p className="text-[10px] text-muted-foreground/50 mt-1.5 px-1">{FONTE_CONFIG[form.fonte].hint}</p>
+        </div>
+      </div>
+
+      {/* Erro inline */}
+      {status === "error" && (
+        <div className="flex gap-2.5 p-3.5 bg-red-500/[0.06] border border-red-500/20 rounded-2xl">
+          <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] font-black text-red-400">Erro ao enviar</p>
+            <p className="text-[10px] text-red-400/70 mt-0.5 font-mono break-all">{errorMsg}</p>
+          </div>
+          <button type="button" onClick={() => setStatus("idle")} className="ml-auto">
+            <X className="size-4 text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={status === "loading"}
+        className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 active:bg-primary/80 transition-all"
+      >
+        {status === "loading" ? (
+          <><Loader2 className="size-4 animate-spin" /> Enviando…</>
+        ) : (
+          <><Upload className="size-4" /> Lançar música</>
+        )}
+      </button>
+    </form>
+  );
+}
+
 function HomeTab({
   musicasDB,
   playMusicVideosDB,
@@ -876,9 +1202,14 @@ function HomeTab({
                     onMore={() => onTabChange("clipes")}
                   />
                   <div className="grid grid-cols-2 gap-3">
-                    {lancVideos.map((item) => <VideoCard key={item.id} item={item} queue={lancVideos} />)}
+                    {lancVideos.map((item) => (
+                      <VideoCard key={item.id} item={item} queue={lancVideos} />
+                    ))}
                   </div>
                 </div>
+              )}
+              {lancMusicas.length === 0 && lancVideos.length === 0 && (
+                <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum lançamento recente.</p>
               )}
             </>
           )}
@@ -888,554 +1219,50 @@ function HomeTab({
   );
 }
 
-// ─── Tipos do formulário de lançamento ────────────────────────────────────
-type FonteMidia = "youtube" | "drive" | "telegram" | "outra";
-
-interface LancarMusicaForm {
-  titulo: string;
-  tipoSingle: string;
-  tipoMusica: string;
-  artistas: string;         // campo livre; serializado como array no submit
-  substituir: "Sim" | "Não";
-  musicaSubstituida: string;
-  fonte: FonteMidia;
-  urlOuFileId: string;
-}
-
-const INITIAL_FORM: LancarMusicaForm = {
-  titulo: "",
-  tipoSingle: "",
-  tipoMusica: "",
-  artistas: "",
-  substituir: "Não",
-  musicaSubstituida: "",
-  fonte: "youtube",
-  urlOuFileId: "",
-};
-
-const FONTE_META: Record<FonteMidia, { label: string; placeholder: string; hint: string }> = {
-  youtube:  { label: "URL do YouTube",      placeholder: "https://www.youtube.com/watch?v=...",  hint: "Cole o link completo do vídeo/música no YouTube" },
-  drive:    { label: "ID do Google Drive",  placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74O",  hint: "Cole o ID do arquivo no Google Drive (não o link completo)" },
-  telegram: { label: "File ID do Telegram", placeholder: "AgACAgIAAxkBAAI...",                    hint: "Cole o file_id retornado pelo bot do Telegram" },
-  outra:    { label: "URL / Identificador", placeholder: "https://...",                            hint: "Cole qualquer URL ou identificador acessível" },
-};
-
-type SubmitStatus = "idle" | "loading" | "success" | "error";
-
-// ─── Formulário de lançamento ──────────────────────────────────────────────
-function LancarMusicaFormComponent() {
-  const [form, setForm] = useState<LancarMusicaForm>(INITIAL_FORM);
-  const [status, setStatus] = useState<SubmitStatus>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  function set<K extends keyof LancarMusicaForm>(key: K, value: LancarMusicaForm[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function resetForm() {
-    setForm(INITIAL_FORM);
-    setStatus("idle");
-    setErrorMsg("");
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.titulo.trim()) return;
-
-    setStatus("loading");
-    setErrorMsg("");
-
-    // Constrói payload compatível com action=gravarMusica do GAS legado
-    const artistasArray = form.artistas
-      .split(",")
-      .map((a) => a.trim())
-      .filter(Boolean);
-
-    const payload = {
-      action: "gravarMusica",
-      titulo: form.titulo.trim(),
-      tipoSingle: form.tipoSingle.trim(),
-      tipoMusica: form.tipoMusica.trim(),
-      artistas: artistasArray,
-      substituir: form.substituir,
-      musicaSubstituida: form.substituir === "Sim" ? form.musicaSubstituida.trim() : "",
-      fonte: form.fonte,
-      urlOuFileId: form.urlOuFileId.trim(),
-    };
-
-    try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      // GAS retorna 200 mesmo em erros lógicos — verificamos o body
-      const text = await res.text();
-      let json: { status?: string; error?: string; message?: string } = {};
-      try { json = JSON.parse(text); } catch { /* GAS às vezes retorna texto puro */ }
-
-      if (!res.ok || json.status === "error") {
-        throw new Error(json.error || json.message || `HTTP ${res.status}`);
-      }
-
-      setStatus("success");
-    } catch (err: unknown) {
-      setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  const fonteMeta = FONTE_META[form.fonte];
-
-  // ── Estado de sucesso ──────────────────────────────────────────────────
-  if (status === "success") {
-    return (
-      <div className="flex flex-col items-center gap-5 py-12 text-center">
-        <div className="size-16 rounded-full bg-green-500/15 grid place-items-center">
-          <CheckCircle2 className="size-8 text-green-400" />
-        </div>
-        <div>
-          <p className="text-sm font-black uppercase tracking-tight">Enviado com sucesso!</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-[26ch]">
-            "{form.titulo}" foi registrado e será processado em breve.
-          </p>
-        </div>
-        <button
-          onClick={resetForm}
-          className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest"
-        >
-          Lançar outra
-        </button>
-      </div>
-    );
-  }
-
-  // ── Formulário ──────────────────────────────────────────────────────────
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Cabeçalho */}
-      <div className="flex items-center gap-3 pb-1">
-        <div className="size-10 rounded-2xl bg-primary/15 grid place-items-center flex-shrink-0">
-          <Upload className="size-5 text-primary" />
-        </div>
-        <div>
-          <p className="text-sm font-black uppercase tracking-tight leading-tight">Lançar Música</p>
-          <p className="text-[10px] text-muted-foreground">Preencha os dados e envie para o catálogo</p>
-        </div>
-      </div>
-
-      {/* Título */}
-      <fieldset className="space-y-1.5">
-        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-titulo">
-          Título da música *
-        </label>
-        <input
-          id="lm-titulo"
-          type="text"
-          required
-          value={form.titulo}
-          onChange={(e) => set("titulo", e.target.value)}
-          placeholder="Nome da faixa"
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all"
-        />
-      </fieldset>
-
-      {/* Tipo Single + Tipo Música (lado a lado) */}
-      <div className="grid grid-cols-2 gap-3">
-        <fieldset className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-tipo-single">
-            Tipo de single
-          </label>
-          <input
-            id="lm-tipo-single"
-            type="text"
-            value={form.tipoSingle}
-            onChange={(e) => set("tipoSingle", e.target.value)}
-            placeholder="Ex: Single, EP…"
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all"
-          />
-        </fieldset>
-        <fieldset className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-tipo-musica">
-            Tipo de música
-          </label>
-          <input
-            id="lm-tipo-musica"
-            type="text"
-            value={form.tipoMusica}
-            onChange={(e) => set("tipoMusica", e.target.value)}
-            placeholder="Ex: Pop, Rap…"
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all"
-          />
-        </fieldset>
-      </div>
-
-      {/* Artistas */}
-      <fieldset className="space-y-1.5">
-        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-artistas">
-          Artistas
-        </label>
-        <input
-          id="lm-artistas"
-          type="text"
-          value={form.artistas}
-          onChange={(e) => set("artistas", e.target.value)}
-          placeholder="Separe por vírgula: Artista A, Artista B"
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all"
-        />
-        <p className="text-[9px] text-muted-foreground/50 px-1">Separe múltiplos artistas com vírgula</p>
-      </fieldset>
-
-      {/* Substituir */}
-      <fieldset className="space-y-2">
-        <legend className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-          Substitui música existente?
-        </legend>
-        <div className="flex gap-2">
-          {(["Não", "Sim"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => set("substituir", opt)}
-              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                form.substituir === opt
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg"
-                  : "border-white/[0.08] text-muted-foreground"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* Música substituída (condicional) */}
-      {form.substituir === "Sim" && (
-        <fieldset className="space-y-1.5">
-          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-musica-substituida">
-            Música a ser substituída
-          </label>
-          <input
-            id="lm-musica-substituida"
-            type="text"
-            value={form.musicaSubstituida}
-            onChange={(e) => set("musicaSubstituida", e.target.value)}
-            placeholder="Nome ou ID da música substituída"
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all"
-          />
-        </fieldset>
-      )}
-
-      {/* Fonte de mídia */}
-      <fieldset className="space-y-2">
-        <legend className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-          Fonte da mídia
-        </legend>
-        <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(FONTE_META) as FonteMidia[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => set("fonte", f)}
-              className={`py-2.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                form.fonte === f
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg"
-                  : "border-white/[0.08] text-muted-foreground"
-              }`}
-            >
-              {f === "youtube" ? "▶ YouTube" : f === "drive" ? "◈ Drive" : f === "telegram" ? "✈ Telegram" : "🔗 Outra"}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* URL / File ID dinâmico */}
-      <fieldset className="space-y-1.5">
-        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground" htmlFor="lm-url">
-          {fonteMeta.label}
-        </label>
-        <input
-          id="lm-url"
-          type="text"
-          value={form.urlOuFileId}
-          onChange={(e) => set("urlOuFileId", e.target.value)}
-          placeholder={fonteMeta.placeholder}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-primary/5 transition-all font-mono"
-        />
-        <p className="text-[9px] text-muted-foreground/50 px-1">{fonteMeta.hint}</p>
-      </fieldset>
-
-      {/* Erro de envio */}
-      {status === "error" && (
-        <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">Erro ao enviar</p>
-            <p className="text-[10px] text-red-400/70 mt-0.5 break-all font-mono">{errorMsg}</p>
-          </div>
-          <button type="button" onClick={() => setStatus("idle")} className="text-red-400/50 active:text-red-400">
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Submit */}
-      <button
-        type="submit"
-        disabled={status === "loading" || !form.titulo.trim()}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-      >
-        {status === "loading" ? (
-          <><Loader2 className="size-4 animate-spin" /> Enviando…</>
-        ) : (
-          <><Send className="size-4" /> Enviar para o catálogo</>
-        )}
-      </button>
-    </form>
-  );
-}
-
-type MusicasSubTab = "lancamentos" | "albuns" | "lancar";
-
-function MusicasTab({ musicasDB, loading }: {
-  musicasDB: SheetItem[];
-  loading: boolean;
-}) {
-  const [subTab, setSubTab] = useState<MusicasSubTab>("lancamentos");
-
-  const SUB_TABS: { id: MusicasSubTab; label: string; icon: React.ElementType }[] = [
-    { id: "lancamentos", label: "Últimos lançamentos", icon: Music },
-    { id: "albuns",      label: "Álbuns",              icon: Music },
-    { id: "lancar",      label: "Lançar",              icon: PlusCircle },
-  ];
-
-  const lancamentos = useMemo<{ item: PlayItem; rawDate: string }[]>(() => {
-    return [...musicasDB]
-      .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
-      .slice(0, 30)
-      .map((m) => ({
-        item: toPlayItemMusica(m),
-        rawDate: getField(
-          m,
-          "Data de lançamento",
-          "Data de lancamento",
-          "data_de_lancamento",
-          "datadelancamento",
-          "data_lancamento",
-          "datalancamento",
-          "data",
-          "release_date",
-          "releasedate",
-        ),
-      }));
-  }, [musicasDB]);
-
-  const albuns = useMemo(() => {
-    const map: Record<string, { title: string; artist: string; capa: string; faixas: PlayItem[] }> = {};
-    musicasDB.forEach((m) => {
-      const album = getField(m, "album");
-      if (!album) return;
-      if (!map[album]) {
-        map[album] = {
-          title: album,
-          artist: getField(m, "act_principal", "actprincipal"),
-          capa: getField(m, "capa_da_musica", "capadamusica", "capa", "cover"),
-          faixas: [],
-        };
-      }
-      map[album].faixas.push(toPlayItem(m, "musica"));
-    });
-    return Object.values(map);
-  }, [musicasDB]);
-
-  if (loading && musicasDB.length === 0) return <SkeletonGrid cols={3} rows={4} />;
-
-  return (
-    <div className="space-y-5">
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {SUB_TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setSubTab(id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap flex-shrink-0 transition-all ${
-              subTab === id
-                ? "bg-primary text-primary-foreground shadow-lg"
-                : "text-muted-foreground"
-            }`}
-          >
-            <Icon className="size-3" />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {subTab === "lancamentos" && (
-        <div className="space-y-3">
-          {lancamentos.length === 0 ? (
-            <p className="text-center text-xs text-muted-foreground py-12 opacity-40">Nenhuma música ainda.</p>
-          ) : (
-            <>
-              <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-black px-1 pb-1">
-                {lancamentos.length} músicas · mais recente primeiro
-              </p>
-              <div className="grid grid-cols-3 gap-3">
-                {lancamentos.map(({ item, rawDate }) => (
-                  <SongCardWithDate
-                    key={item.id}
-                    item={item}
-                    queue={lancamentos.map((x) => x.item)}
-                    rawDate={rawDate}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {subTab === "albuns" && (
-        <div className="grid grid-cols-2 gap-3">
-          {albuns.length === 0 ? (
-            <p className="col-span-2 text-center text-xs text-muted-foreground py-12 opacity-40">Nenhum álbum ainda.</p>
-          ) : (
-            albuns.map((a) => (
-              <div key={a.title} className="flex flex-col gap-2">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-primary/10">
-                  {a.capa ? (
-                    <img src={driveThumb(a.capa, 300)} alt={a.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                  ) : (
-                    <div className="w-full h-full grid place-items-center"><Music className="size-8 text-primary/30" /></div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-black truncate uppercase tracking-tight">{a.title}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{a.artist}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* ─── Sub-aba Lançar: formulário real ────────────────────────────── */}
-      {subTab === "lancar" && (
-        <div className="bg-white/[0.02] border border-white/[0.06] rounded-[1.5rem] p-4">
-          <LancarMusicaFormComponent />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ClipesTab({ musicVideosDB, loading }: { musicVideosDB: SheetItem[]; loading: boolean }) {
-  const [subTab, setSubTab] = useState<"novos" | "top">("novos");
-  const novos = useMemo<PlayItem[]>(
-    () => [...musicVideosDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)).map((m) => toPlayItem(m, "musicvideo")),
-    [musicVideosDB]
-  );
-  const top = useMemo<PlayItem[]>(
-    () => [...musicVideosDB].sort((a, b) => (parseInt(getField(b, "weeks_video", "weeksvideo")) || 0) - (parseInt(getField(a, "weeks_video", "weeksvideo")) || 0)).map((m) => toPlayItem(m, "musicvideo")),
-    [musicVideosDB]
-  );
-  const list = subTab === "novos" ? novos : top;
-
-  if (loading) return <SkeletonGrid cols={2} rows={3} />;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {(["novos", "top"] as const).map((t) => (
-          <button key={t} onClick={() => setSubTab(t)}
-            className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              subTab === t ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground"
-            }`}>
-            {t === "novos" ? "Lançamentos" : "Top Clipes"}
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        {list.length === 0
-          ? <p className="col-span-2 text-center text-xs text-muted-foreground py-12 opacity-40">Nenhum clipe ainda.</p>
-          : list.map((item) => <VideoCard key={item.id} item={item} queue={list} />)
-        }
-      </div>
-    </div>
-  );
-}
-
-function VideosTab({ videosDB, loading }: { videosDB: SheetItem[]; loading: boolean }) {
-  const videos = useMemo<PlayItem[]>(
-    () => [...videosDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)).map((m) => toPlayItem(m, "video")),
-    [videosDB]
-  );
-
-  if (loading) return <SkeletonGrid cols={2} rows={3} />;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3">
-        {videos.length === 0
-          ? <p className="col-span-2 text-center text-xs text-muted-foreground py-12 opacity-40">Nenhum vídeo ainda.</p>
-          : videos.map((item) => <VideoCard key={item.id} item={item} queue={videos} />)
-        }
-      </div>
-    </div>
-  );
-}
-
-// ─── Forum ─────────────────────────────────────────────────────────────────
-type ForumTopico = {
+// ─── Fórum ─────────────────────────────────────────────────────────────────
+type TopicoForum = {
   id: string;
   titulo: string;
-  capa: string;
-  artista: string;
-  totalComentarios: number;
+  mensagens: number;
+  ultimaMsg: string;
+  threadId?: string;
 };
 
 type Comentario = {
   id: string;
   autor: string;
   texto: string;
-  dataHora: string;
+  data: string;
 };
 
 function ForumTopicoDetalhe({
   topico,
   onBack,
 }: {
-  topico: ForumTopico;
+  topico: TopicoForum;
   onBack: () => void;
 }) {
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
-  const [loadingComents, setLoadingComents] = useState(true);
-  const [errorComents, setErrorComents] = useState("");
-  const [novoComentario, setNovoComentario] = useState("");
-  const [autor, setAutor] = useState("");
+  const [loadingComs, setLoadingComs] = useState(true);
+  const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [envioOk, setEnvioOk] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    async function load() {
-      setLoadingComents(true);
-      setErrorComents("");
-      try {
-        const url = `${API_URL}?action=getComentarios&topicoId=${encodeURIComponent(topico.id)}`;
-        const res = await fetch(url);
-        const json = await res.json();
-        if (json.comentarios) setComentarios(json.comentarios);
-        else setComentarios([]);
-      } catch (e) {
-        setErrorComents(String(e));
-      } finally {
-        setLoadingComents(false);
-      }
-    }
-    load();
+    setLoadingComs(true);
+    fetch(`${API_URL}?action=getComentarios&topicoId=${topico.id}`)
+      .then((r) => r.json())
+      .then((d) => setComentarios(Array.isArray(d) ? d : d?.comentarios ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingComs(false));
   }, [topico.id]);
 
-  async function enviarComentario() {
-    if (!novoComentario.trim()) return;
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [comentarios]);
+
+  const enviar = async () => {
+    if (!texto.trim()) return;
     setEnviando(true);
     try {
       await fetch(API_URL, {
@@ -1444,137 +1271,108 @@ function ForumTopicoDetalhe({
         body: JSON.stringify({
           action: "addComentario",
           topicoId: topico.id,
-          autor: autor.trim() || "Anônimo",
-          texto: novoComentario.trim(),
+          threadId: topico.threadId,
+          texto: texto.trim(),
         }),
       });
-      setEnvioOk(true);
-      setNovoComentario("");
-      setTimeout(() => setEnvioOk(false), 3000);
-    } finally {
-      setEnviando(false);
-    }
-  }
+      setTexto("");
+      const d = await fetch(`${API_URL}?action=getComentarios&topicoId=${topico.id}`).then((r) => r.json());
+      setComentarios(Array.isArray(d) ? d : d?.comentarios ?? []);
+    } catch {}
+    setEnviando(false);
+  };
 
   return (
-    <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors">
+    <div className="flex flex-col h-full">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors mb-4"
+      >
         <ChevronLeft className="size-4" /> Fórum
       </button>
-      <div className="flex items-center gap-4 p-4 bg-white/[0.03] border border-white/[0.06] rounded-[1.5rem]">
-        <div className="size-14 rounded-2xl overflow-hidden bg-primary/10 flex-shrink-0">
-          {topico.capa
-            ? <img src={driveThumb(topico.capa, 100)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-            : <div className="w-full h-full grid place-items-center"><Music className="size-6 text-primary/30" /></div>
-          }
-        </div>
-        <div>
-          <p className="text-sm font-black tracking-tight">{topico.titulo}</p>
-          <p className="text-[10px] text-muted-foreground">{topico.artista}</p>
-        </div>
+      <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-[1.5rem] mb-4">
+        <p className="text-xs font-black uppercase tracking-tight">{topico.titulo}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">{topico.mensagens} mensagens</p>
       </div>
-
-      <div className="space-y-2">
-        {loadingComents ? (
+      <div className="flex-1 space-y-3 overflow-y-auto mb-4">
+        {loadingComs ? (
           <SkeletonList rows={3} />
-        ) : errorComents ? (
-          <div className="flex gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
-            <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-[10px] text-red-400/80 font-mono">{errorComents}</p>
-          </div>
         ) : comentarios.length === 0 ? (
-          <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum comentário ainda. Seja o primeiro!</p>
+          <p className="text-center text-[11px] text-muted-foreground/50 py-6">Nenhum comentário ainda. Seja o primeiro!</p>
         ) : (
           comentarios.map((c) => (
-            <div key={c.id} className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">{c.autor}</p>
-                <p className="text-[9px] text-muted-foreground/40">{c.dataHora}</p>
+            <div key={c.id} className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black text-primary/80">{c.autor}</span>
+                <span className="text-[9px] text-muted-foreground/50">{c.data}</span>
               </div>
-              <p className="text-xs text-muted-foreground">{c.texto}</p>
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{c.texto}</p>
             </div>
           ))
         )}
+        <div ref={bottomRef} />
       </div>
-
-      <div className="space-y-2 pt-2 border-t border-white/[0.05]">
+      <div className="flex gap-2">
         <input
-          value={autor}
-          onChange={(e) => setAutor(e.target.value)}
-          placeholder="Seu nome (opcional)"
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-all"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && enviar()}
+          placeholder="Escreva um comentário…"
+          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-all"
         />
-        <div className="flex gap-2">
-          <input
-            value={novoComentario}
-            onChange={(e) => setNovoComentario(e.target.value)}
-            placeholder="Escreva um comentário…"
-            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-xs placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-all"
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarComentario(); } }}
-          />
-          <button
-            onClick={enviarComentario}
-            disabled={enviando || !novoComentario.trim()}
-            className="size-10 flex-shrink-0 rounded-xl bg-primary text-primary-foreground grid place-items-center disabled:opacity-40 transition-all active:scale-95"
-          >
-            {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </button>
-        </div>
-        {envioOk && <p className="text-[10px] text-green-400 font-black uppercase tracking-widest px-1">✓ Comentário enviado!</p>}
+        <button
+          onClick={enviar}
+          disabled={enviando || !texto.trim()}
+          className="size-12 rounded-2xl bg-primary/10 border border-primary/20 grid place-items-center text-primary disabled:opacity-40 active:bg-primary/20 transition-all flex-shrink-0"
+        >
+          {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+        </button>
       </div>
     </div>
   );
 }
 
-function ForumTab({ musicasDB, loading }: { musicasDB: SheetItem[]; loading: boolean }) {
-  const [topicoAberto, setTopicoAberto] = useState<ForumTopico | null>(null);
+function ForumTab() {
+  const [topicos, setTopicos] = useState<TopicoForum[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openTopico, setOpenTopico] = useState<TopicoForum | null>(null);
 
-  const topicos = useMemo<ForumTopico[]>(() => {
-    return [...musicasDB]
-      .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
-      .slice(0, 50)
-      .map((m) => {
-        const item = toPlayItemMusica(m);
-        const totalStr = getField(m, "total_comentarios", "totalcomentarios", "comentarios");
-        return {
-          id: item.id,
-          titulo: item.titulo,
-          capa: item.capa,
-          artista: item.artista,
-          totalComentarios: parseInt(totalStr) || 0,
-        };
-      })
-      .filter((t) => t.titulo);
-  }, [musicasDB]);
+  useEffect(() => {
+    fetch(`${API_URL}?action=getTopicos`)
+      .then((r) => r.json())
+      .then((d) => setTopicos(Array.isArray(d) ? d : d?.topicos ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  if (topicoAberto) return <ForumTopicoDetalhe topico={topicoAberto} onBack={() => setTopicoAberto(null)} />;
-  if (loading) return <SkeletonList rows={6} />;
+  if (openTopico)
+    return <ForumTopicoDetalhe topico={openTopico} onBack={() => setOpenTopico(null)} />;
 
   return (
-    <div className="space-y-2">
-      {topicos.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-12 opacity-40">Nenhum tópico disponível.</p>
+    <div className="space-y-3">
+      <SectionHeader icon={<MessageSquare className="size-4 text-primary" />} title="Fórum" />
+      {loading ? (
+        <SkeletonList rows={4} />
+      ) : topicos.length === 0 ? (
+        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum tópico disponível.</p>
       ) : (
         topicos.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTopicoAberto(t)}
-            className="w-full flex items-center gap-3 p-3 rounded-2xl border border-white/[0.05] bg-white/[0.02] active:border-primary/30 transition-all text-left"
+            onClick={() => setOpenTopico(t)}
+            className="w-full flex items-center gap-3 p-3.5 bg-white/[0.03] border border-white/[0.05] rounded-2xl active:border-primary/30 transition-all text-left"
           >
-            <div className="size-12 rounded-xl overflow-hidden bg-primary/10 flex-shrink-0">
-              {t.capa
-                ? <img src={driveThumb(t.capa, 80)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                : <div className="w-full h-full grid place-items-center"><Music className="size-5 text-primary/30" /></div>
-              }
+            <div className="size-10 rounded-xl bg-primary/10 grid place-items-center flex-shrink-0">
+              <MessageSquare className="size-4 text-primary/60" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-black truncate uppercase tracking-tight">{t.titulo}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{t.artista}</p>
-              {t.totalComentarios > 0 && (
-                <p className="text-[9px] text-muted-foreground/50 mt-0.5">{t.totalComentarios} comentário{t.totalComentarios !== 1 ? "s" : ""}</p>
-              )}
+              <p className="text-xs font-black uppercase tracking-tight truncate">{t.titulo}</p>
+              <p className="text-[10px] text-muted-foreground truncate mt-0.5">{t.ultimaMsg}</p>
             </div>
-            <MessageSquare className="size-4 text-muted-foreground/30 flex-shrink-0" />
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <span className="text-[9px] text-muted-foreground/50">{t.mensagens}</span>
+              <ChevronRight className="size-3 text-muted-foreground/40" />
+            </div>
           </button>
         ))
       )}
@@ -1582,85 +1380,231 @@ function ForumTab({ musicasDB, loading }: { musicasDB: SheetItem[]; loading: boo
   );
 }
 
-// ─── Página principal ──────────────────────────────────────────────────────
-function PlayHomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [musicasDB,        setMusicasDB]        = useState<SheetItem[]>([]);
-  const [playMusicVideosDB,setPlayMusicVideosDB] = useState<SheetItem[]>([]);
-  const [videosDB,         setVideosDB]          = useState<SheetItem[]>([]);
-  const [loading,          setLoading]           = useState(true);
-  const [charts,           setCharts]            = useState<ChartData[]>([]);
-  const [chartsLoading,    setChartsLoading]     = useState(true);
-  const [chartsError,      setChartsError]       = useState("");
+// ─── Aba Músicas ───────────────────────────────────────────────────────────
+type MusicasSubTab = "lancamentos" | "albuns" | "lancar";
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const [m, pmv, v] = await Promise.all([
-        fetchSheetValues("Músicas"),
-        fetchSheetValues("PlayMusicVideos"),
-        fetchSheetValues("Videos"),
-      ]);
-      setMusicasDB(sheetRowsToObjects(m.values));
-      setPlayMusicVideosDB(sheetRowsToObjects(pmv.values));
-      setVideosDB(sheetRowsToObjects(v.values));
-      setLoading(false);
-    }
-    load();
-  }, []);
+const MUSICAS_SUBTABS: { id: MusicasSubTab; label: string }[] = [
+  { id: "lancamentos", label: "Lançamentos" },
+  { id: "albuns",      label: "Álbuns" },
+  { id: "lancar",      label: "Lançar" },
+];
 
-  useEffect(() => {
-    async function loadCharts() {
-      setChartsLoading(true);
-      let errors: string[] = [];
-      const results = await Promise.all(
-        CHARTS_CONFIG.map(async (cfg) => {
-          const { values, error } = await fetchSheetValues(cfg.aba);
-          if (error) errors.push(`${cfg.nome}: ${error}`);
-          const { entries, capaDaPlaylist } = processChart(values, cfg.isVideo, cfg.maxEntries);
-          return { nome: cfg.nome, subtitulo: cfg.subtitulo, icone: cfg.icone, cor: cfg.cor, capaDaPlaylist, entries };
-        })
-      );
-      setCharts(results.filter((r) => r.entries.length > 0));
-      if (errors.length) setChartsError(errors.join(" | "));
-      setChartsLoading(false);
-    }
-    loadCharts();
-  }, []);
+function MusicasTab({
+  musicasDB,
+  loading,
+}: {
+  musicasDB: SheetItem[];
+  loading: boolean;
+}) {
+  const [subTab, setSubTab] = useState<MusicasSubTab>("lancamentos");
+
+  const sorted = useMemo(
+    () => [...musicasDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)),
+    [musicasDB]
+  );
+
+  const playItems = useMemo(() => sorted.map(toPlayItemMusica), [sorted]);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1.5 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
+        {MUSICAS_SUBTABS.map((st) => (
+          <button
+            key={st.id}
+            onClick={() => setSubTab(st.id)}
+            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              subTab === st.id
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-muted-foreground"
+            }`}
+          >
+            {st.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Lançamentos */}
+      {subTab === "lancamentos" && (
+        <div className="space-y-1">
+          {loading ? (
+            <SkeletonList rows={6} />
+          ) : sorted.length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhuma música cadastrada.</p>
+          ) : (
+            sorted.map((m, i) => (
+              <RowTrack
+                key={playItems[i].id}
+                item={playItems[i]}
+                queue={playItems}
+                num={i + 1}
+                rawDate={getField(
+                  m,
+                  "Data de lançamento", "Data de lancamento", "data_de_lancamento",
+                  "datadelancamento", "data_lancamento", "datalancamento",
+                  "data", "release_date", "releasedate",
+                )}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Álbuns */}
+      {subTab === "albuns" && (
+        <div className="space-y-3">
+          <SectionHeader icon={<Music className="size-4 text-primary" />} title="Álbuns" />
+          {loading ? (
+            <SkeletonGrid cols={2} rows={2} />
+          ) : (
+            <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Álbuns em breve.</p>
+          )}
+        </div>
+      )}
+
+      {/* Lançar — Formulário real */}
+      {subTab === "lancar" && <LancarTab />}
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────
+function PlayHomePage() {
+  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [musicasDB, setMusicasDB] = useState<SheetItem[]>([]);
+  const [playMusicVideosDB, setPlayMusicVideosDB] = useState<SheetItem[]>([]);
+  const [videosDB, setVideosDB] = useState<SheetItem[]>([]);
+  const [charts, setCharts] = useState<ChartData[]>([]);
+  const [chartsLoading, setChartsLoading] = useState(true);
+  const [chartsError, setChartsError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetchSheetValues("Empire_Play"),
+      fetchSheetValues("Empire_Play_Music_Videos"),
+      fetchSheetValues("Empire_Play_Videos"),
+    ]).then(([musicas, pmv, videos]) => {
+      setMusicasDB(sheetRowsToObjects(musicas.values));
+      setPlayMusicVideosDB(sheetRowsToObjects(pmv.values));
+      setVideosDB(sheetRowsToObjects(videos.values));
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    setChartsLoading(true);
+    let errAcc = "";
+    Promise.all(
+      CHARTS_CONFIG.map((c) =>
+        fetchSheetValues(c.aba).then((r) => {
+          if (r.error) errAcc += r.error + " ";
+          return { config: c, values: r.values };
+        })
+      )
+    ).then((results) => {
+      const built: ChartData[] = results
+        .map(({ config, values }) => {
+          const { entries, capaDaPlaylist } = processChart(values, config.isVideo, config.maxEntries);
+          if (entries.length === 0) return null;
+          return {
+            nome: config.nome,
+            subtitulo: config.subtitulo,
+            icone: config.icone,
+            cor: config.cor,
+            capaDaPlaylist,
+            entries,
+          } as ChartData;
+        })
+        .filter((c): c is ChartData => c !== null);
+      setCharts(built);
+      setChartsError(errAcc.trim());
+      setChartsLoading(false);
+    });
+  }, []);
+
+  const clipes = useMemo(() => playMusicVideosDB.map((m) => toPlayItem(m, "musicvideo")), [playMusicVideosDB]);
+  const videos = useMemo(() => videosDB.map((m) => toPlayItem(m, "video")), [videosDB]);
+
+  return (
+    <div className="flex flex-col min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 flex items-center gap-2">
-        <Radio className="size-5 text-primary flex-shrink-0" />
-        <span className="text-sm font-black uppercase tracking-widest">Empire Play</span>
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
+        <div className="size-8 rounded-xl bg-primary/20 grid place-items-center flex-shrink-0">
+          <Radio className="size-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-black uppercase tracking-widest leading-none">Empire Play</p>
+          <p className="text-[9px] text-muted-foreground/60 mt-0.5">Catálogo · Fórum · Lançamentos</p>
+        </div>
       </header>
 
-      {/* Conteúdo */}
-      <main className="flex-1 px-4 py-5 pb-32">
-        {activeTab === "home"    && <HomeTab musicasDB={musicasDB} playMusicVideosDB={playMusicVideosDB} charts={charts} chartsLoading={chartsLoading} chartsError={chartsError} loading={loading} onTabChange={setActiveTab} />}
-        {activeTab === "musicas" && <MusicasTab musicasDB={musicasDB} loading={loading} />}
-        {activeTab === "clipes"  && <ClipesTab musicVideosDB={playMusicVideosDB} loading={loading} />}
-        {activeTab === "videos"  && <VideosTab videosDB={videosDB} loading={loading} />}
-        {activeTab === "forum"   && <ForumTab musicasDB={musicasDB} loading={loading} />}
+      {/* Content */}
+      <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
+        {activeTab === "home" && (
+          <HomeTab
+            musicasDB={musicasDB}
+            playMusicVideosDB={playMusicVideosDB}
+            charts={charts}
+            chartsLoading={chartsLoading}
+            chartsError={chartsError}
+            loading={loading}
+            onTabChange={setActiveTab}
+          />
+        )}
+        {activeTab === "musicas" && (
+          <MusicasTab musicasDB={musicasDB} loading={loading} />
+        )}
+        {activeTab === "clipes" && (
+          <div className="space-y-4">
+            <SectionHeader icon={<Clapperboard className="size-4 text-primary" />} title="Clipes" />
+            {loading ? (
+              <SkeletonGrid cols={2} rows={3} />
+            ) : clipes.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum clipe disponível.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {clipes.map((item) => <VideoCard key={item.id} item={item} queue={clipes} />)}
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === "videos" && (
+          <div className="space-y-4">
+            <SectionHeader icon={<Tv className="size-4 text-primary" />} title="Vídeos" />
+            {loading ? (
+              <SkeletonGrid cols={2} rows={3} />
+            ) : videos.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum vídeo disponível.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {videos.map((item) => <VideoCard key={item.id} item={item} queue={videos} />)}
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === "forum" && <ForumTab />}
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-white/[0.06] px-2 pb-safe">
-        <div className="flex items-center justify-around max-w-md mx-auto">
-          {TABS.map(({ id, label, icon: Icon }) => (
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-xl border-t border-white/[0.06] flex">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
             <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex flex-col items-center gap-1 py-3 px-3 transition-all ${
-                activeTab === id ? "text-primary" : "text-muted-foreground"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all ${
+                isActive ? "text-primary" : "text-muted-foreground/50"
               }`}
             >
               <Icon className="size-5" />
-              <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </nav>
     </div>
   );
