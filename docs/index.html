@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Empire Play — Testes</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;background:#0a0a0a;color:#fff}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;background:#0a0a0a;padding-bottom:140px}
+button{cursor:pointer;background:none;border:none;color:inherit;font:inherit}
+
+/* ── Header ── */
+#header{
+  position:sticky;top:0;z-index:20;
+  background:rgba(0,0,0,0.85);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  padding:0 16px;
+}
+#header-inner{max-width:640px;margin:0 auto}
+#header-title{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 0 0;
+}
+#header-title .label{
+  font-size:11px;font-weight:900;
+  text-transform:uppercase;letter-spacing:.18em;
+  color:rgba(255,255,255,.9);
+}
+#header-title .badge{
+  margin-left:auto;font-size:8px;
+  color:rgba(255,255,255,.2);font-family:monospace;
+}
+#tabs{display:flex;gap:4px;margin-top:6px}
+.tab-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 12px;
+  font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:2px solid transparent;
+  color:rgba(255,255,255,.35);
+  transition:color .15s;margin-bottom:-1px;
+}
+.tab-btn.active{border-bottom-color:#fff;color:#fff}
+
+/* ── Body ── */
+#body{max-width:640px;margin:0 auto;padding:16px 16px 0;width:100%}
+section{margin-bottom:16px}
+.section-label{
+  font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.14em;color:rgba(255,255,255,.25);margin-bottom:10px;
+}
+
+/* ── Music Card ── */
+.music-list{display:flex;flex-direction:column;gap:2px}
+.music-card{
+  display:flex;align-items:center;gap:12px;
+  width:100%;text-align:left;
+  border-radius:12px;padding:10px 12px;
+  background:transparent;
+  border:1px solid transparent;
+  transition:background .15s;
+}
+.music-card:hover{background:rgba(255,255,255,.04)}
+.music-card.active{
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.12);
+}
+.thumb{
+  width:40px;height:40px;border-radius:8px;
+  overflow:hidden;background:rgba(255,255,255,.05);
+  flex-shrink:0;position:relative;
+  display:grid;place-items:center;
+}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb-overlay{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,.5);
+  display:grid;place-items:center;
+}
+.thumb-icon{color:rgba(255,255,255,.25);font-size:14px}
+.track-info{min-width:0;flex:1}
+.track-title{
+  font-size:12px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:rgba(255,255,255,.85);
+}
+.music-card.active .track-title{color:#fff}
+.track-artist{
+  font-size:10px;color:rgba(255,255,255,.35);
+  margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* ── Badge ── */
+.src-badge{
+  font-size:8px;font-family:monospace;font-weight:700;
+  border-radius:4px;padding:1px 4px;text-transform:uppercase;flex-shrink:0;
+}
+.badge-yt{background:rgba(239,68,68,.2);color:#fca5a5}
+.badge-tg{background:rgba(59,130,246,.2);color:#93c5fd}
+.badge-dr{background:rgba(255,255,255,.08);color:rgba(255,255,255,.35)}
+
+/* ── Video row ── */
+.video-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
+.video-card{
+  position:relative;flex-shrink:0;width:144px;
+  border-radius:12px;overflow:hidden;aspect-ratio:16/9;
+  background:rgba(255,255,255,.05);
+  outline:none;
+  transition:transform .15s;
+}
+.video-card:hover{transform:scale(1.03)}
+.video-card.active{outline:2px solid rgba(255,255,255,.6)}
+.video-card img{width:100%;height:100%;object-fit:cover}
+.video-grad{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 60%);
+}
+.video-meta{
+  position:absolute;bottom:0;left:0;right:0;padding:8px;
+}
+.video-title{
+  font-size:9px;font-weight:700;color:#fff;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.video-artist{font-size:8px;color:rgba(255,255,255,.4);margin-top:2px}
+.video-badge-pos{position:absolute;top:6px;right:6px}
+
+/* ── Chart row ── */
+.chart-tabs{display:flex;gap:6px;margin-bottom:16px}
+.chart-tab{
+  padding:5px 14px;border-radius:999px;
+  font-size:10px;font-weight:700;text-transform:uppercase;
+  background:rgba(255,255,255,.06);
+  color:rgba(255,255,255,.4);
+  transition:background .15s;
+}
+.chart-tab.active{background:#fff;color:#000}
+.chart-list{display:flex;flex-direction:column;gap:2px}
+.chart-row{
+  display:flex;align-items:center;gap:10px;
+  width:100%;text-align:left;
+  border-radius:8px;padding:8px 10px;
+  background:transparent;
+  border:1px solid transparent;
+  transition:background .15s;
+}
+.chart-row:hover{background:rgba(255,255,255,.04)}
+.chart-row.active{background:rgba(255,255,255,.06)}
+.chart-pos{
+  font-size:11px;font-weight:900;width:16px;
+  color:rgba(255,255,255,.25);font-variant-numeric:tabular-nums;flex-shrink:0;
+}
+.chart-row.active .chart-pos{color:#fff}
+.chart-thumb{
+  width:32px;height:32px;border-radius:6px;
+  overflow:hidden;background:rgba(255,255,255,.05);flex-shrink:0;
+  display:grid;place-items:center;
+}
+.chart-thumb img{width:100%;height:100%;object-fit:cover}
+.chart-info{min-width:0;flex:1}
+.chart-title{
+  font-size:11px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:rgba(255,255,255,.85);
+}
+.chart-row.active .chart-title{color:#fff}
+.chart-artist{font-size:9px;color:rgba(255,255,255,.35);margin-top:1px}
+.chart-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* ── MiniPlayer ── */
+#miniplayer{
+  position:fixed;bottom:56px;left:0;right:0;z-index:30;
+  display:none;
+  padding:0 12px 8px;
+}
+#miniplayer.visible{display:block}
+#mp-inner{
+  max-width:640px;margin:0 auto;
+  background:rgba(20,20,20,.97);
+  backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;
+  padding:10px 14px;
+}
+#mp-track{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+#mp-thumb{
+  width:36px;height:36px;border-radius:8px;
+  background:rgba(255,255,255,.05);flex-shrink:0;
+  overflow:hidden;display:grid;place-items:center;
+}
+#mp-thumb img{width:100%;height:100%;object-fit:cover}
+#mp-info{min-width:0;flex:1}
+#mp-title{
+  font-size:12px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#mp-artist{font-size:10px;color:rgba(255,255,255,.4);margin-top:1px}
+#mp-controls{display:flex;align-items:center;gap:8px}
+#mp-play-btn{
+  width:28px;height:28px;border-radius:50%;
+  background:#fff;display:grid;place-items:center;color:#000;
+  font-size:11px;flex-shrink:0;
+}
+#mp-progress{flex:1;height:3px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden}
+#mp-bar{height:100%;background:#fff;width:0%;transition:width .5s linear}
+#mp-close{
+  font-size:16px;color:rgba(255,255,255,.3);
+  padding:4px;line-height:1;
+}
+
+/* ── YouTube iframe ── */
+#yt-container{
+  position:fixed;bottom:200px;right:16px;z-index:25;
+  width:200px;aspect-ratio:16/9;
+  border-radius:12px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.1);
+  display:none;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+}
+#yt-container.visible{display:block}
+#yt-frame{width:100%;height:100%;border:none}
+
+/* ── BottomNav ── */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:40;
+  background:rgba(10,10,10,.95);
+  backdrop-filter:blur(16px);
+  border-top:1px solid rgba(255,255,255,.06);
+  display:flex;
+  padding:8px 0 max(8px,env(safe-area-inset-bottom));
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;gap:3px;
+  padding:4px 0;
+  font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;
+  color:rgba(255,255,255,.3);
+  transition:color .15s;
+}
+.nav-btn.active{color:#fff}
+.nav-icon{font-size:18px;line-height:1}
+
+/* ── Tab panels ── */
+.panel{display:none}
+.panel.active{display:block}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{height:4px;width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div id="header-inner">
+    <div id="header-title">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21" fill="rgba(255,255,255,0.6)"/></svg>
+      <span class="label">Empire Play</span>
+      <span class="badge">v-testes</span>
+    </div>
+    <div id="tabs">
+      <button class="tab-btn active" data-tab="musicas" onclick="switchTab('musicas',this)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Músicas
+      </button>
+      <button class="tab-btn" data-tab="videos" onclick="switchTab('videos',this)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="15" height="15" rx="2"/><polygon points="17,8 22,12 17,16"/></svg>
+        Vídeos
+      </button>
+      <button class="tab-btn" data-tab="charts" onclick="switchTab('charts',this)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Charts
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Body -->
+<div id="body">
+
+  <!-- Músicas -->
+  <div class="panel active" id="panel-musicas">
+    <p class="section-label" id="lbl-musicas"></p>
+    <div class="music-list" id="list-musicas"></div>
+  </div>
+
+  <!-- Vídeos -->
+  <div class="panel" id="panel-videos">
+    <p class="section-label" id="lbl-videos"></p>
+    <div class="video-row" id="list-videos"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="panel" id="panel-charts">
+    <div class="chart-tabs">
+      <button class="chart-tab active" data-ctab="spotify" onclick="switchChartTab('spotify',this)">Spotify</button>
+      <button class="chart-tab" data-ctab="apple" onclick="switchChartTab('apple',this)">Apple</button>
+      <button class="chart-tab" data-ctab="youtube" onclick="switchChartTab('youtube',this)">YouTube</button>
+    </div>
+    <div class="chart-list" id="list-charts"></div>
+  </div>
+
+</div>
+
+<!-- MiniPlayer -->
+<div id="miniplayer">
+  <div id="mp-inner">
+    <div id="mp-track">
+      <div id="mp-thumb"><span style="color:rgba(255,255,255,.2);font-size:16px">♪</span></div>
+      <div id="mp-info">
+        <div id="mp-title">—</div>
+        <div id="mp-artist"></div>
+      </div>
+      <div id="mp-src-badge"></div>
+    </div>
+    <div id="mp-controls">
+      <button id="mp-prev" onclick="playerPrev()" style="font-size:16px;color:rgba(255,255,255,.5)">⏮</button>
+      <button id="mp-play-btn" onclick="playerToggle()">
+        <svg id="mp-play-icon" width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+      </button>
+      <div id="mp-progress"><div id="mp-bar"></div></div>
+      <button id="mp-next" onclick="playerNext()" style="font-size:16px;color:rgba(255,255,255,.5)">⏭</button>
+      <button id="mp-close" onclick="playerClose()">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- YouTube container -->
+<div id="yt-container">
+  <iframe id="yt-frame" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+</div>
+
+<!-- BottomNav -->
+<div id="bottom-nav">
+  <button class="nav-btn active" onclick="switchTab('musicas',null)">
+    <span class="nav-icon">♪</span>
+    Play
+  </button>
+  <button class="nav-btn" onclick="alert('Seção Home — não implementada neste protótipo')">
+    <span class="nav-icon">⌂</span>
+    Home
+  </button>
+  <button class="nav-btn" onclick="alert('Seção Perfil — não implementada neste protótipo')">
+    <span class="nav-icon">◉</span>
+    Perfil
+  </button>
+</div>
+
+<script>
+// ── Dados ──────────────────────────────────────────────────────────────────
+const MUSICAS = [
+  {id:"mock-musica-1",titulo:"Ascensão",artista:"Lana Empire",capa:"",audioSrc:"dQw4w9WgXcQ",letra:"Subindo ao topo, esse é o meu destino...",categoria:"musica"},
+  {id:"mock-musica-2",titulo:"Coroa de Ouro",artista:"Zeon Records",capa:"",audioSrc:"9bZkp7q19f0",categoria:"musica"},
+  {id:"mock-musica-3",titulo:"Império",artista:"Nova Era",capa:"",audioSrc:"kJQP7kiw5Fk",categoria:"musica"},
+  {id:"mock-musica-4",titulo:"Telegram Beat [MOCK TG]",artista:"Empire Storage",capa:"",audioSrc:"tg:BQACAgIAAxkBAAIBZmockFileId001",categoria:"musica"},
+  {id:"mock-musica-5",titulo:"Hall of Fame",artista:"Dynasty",capa:"",audioSrc:"hT_nvWreIhg",categoria:"musica"},
+];
+const VIDEOS = [
+  {id:"mock-video-1",titulo:"Clipe Oficial",artista:"Lana Empire",capa:"",audioSrc:"dQw4w9WgXcQ",categoria:"musicvideo"},
+  {id:"mock-video-2",titulo:"Live Session",artista:"Zeon Records",capa:"",audioSrc:"9bZkp7q19f0",categoria:"musicvideo"},
+  {id:"mock-video-3",titulo:"Lyric Video [TG MOCK]",artista:"Empire Storage",capa:"",audioSrc:"tg:BQACAgIAAxkBAAIBZmockVideoId001",categoria:"musicvideo"},
+];
+const CHARTS = {
+  spotify:[
+    {id:"mock-musica-1",titulo:"Ascensão",artista:"Lana Empire",capa:"",audioSrc:"dQw4w9WgXcQ"},
+    {id:"mock-musica-2",titulo:"Coroa de Ouro",artista:"Zeon Records",capa:"",audioSrc:"9bZkp7q19f0"},
+    {id:"mock-musica-3",titulo:"Império",artista:"Nova Era",capa:"",audioSrc:"kJQP7kiw5Fk"},
+    {id:"mock-musica-5",titulo:"Hall of Fame",artista:"Dynasty",capa:"",audioSrc:"hT_nvWreIhg"},
+    {id:"mock-musica-4",titulo:"Telegram Beat",artista:"Empire Storage",capa:"",audioSrc:"tg:BQACAgIAAxkBAAIBZmockFileId001"},
+  ],
+  apple:[
+    {id:"mock-musica-5",titulo:"Hall of Fame",artista:"Dynasty",capa:"",audioSrc:"hT_nvWreIhg"},
+    {id:"mock-musica-1",titulo:"Ascensão",artista:"Lana Empire",capa:"",audioSrc:"dQw4w9WgXcQ"},
+    {id:"mock-musica-3",titulo:"Império",artista:"Nova Era",capa:"",audioSrc:"kJQP7kiw5Fk"},
+  ],
+  youtube:[
+    {id:"mock-video-1",titulo:"Lana Empire - Ascensão (Clipe Oficial)",artista:"Lana Empire",capa:"",audioSrc:"dQw4w9WgXcQ"},
+    {id:"mock-video-2",titulo:"Zeon Records - Coroa de Ouro (Live)",artista:"Zeon Records",capa:"",audioSrc:"9bZkp7q19f0"},
+    {id:"mock-video-3",titulo:"Empire Storage - Telegram Beat (Lyric)",artista:"Empire Storage",capa:"",audioSrc:"tg:BQACAgIAAxkBAAIBZmockVideoId001"},
+  ],
+};
+
+// ── Estado global ─────────────────────────────────────────────────────────
+let queue = [];
+let currentIdx = null;
+let playing = false;
+let currentTab = 'musicas';
+let currentChartTab = 'spotify';
+let progressTimer = null;
+let progressVal = 0;
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function detectType(src){
+  if(!src) return 'drive';
+  if(src.startsWith('tg:') || src.startsWith('tg_file:')) return 'telegram';
+  if(src.includes('youtube') || src.includes('youtu.be') || /^[a-zA-Z0-9_-]{11}$/.test(src)) return 'youtube';
+  return 'drive';
+}
+function badge(src){
+  const t = detectType(src);
+  if(t==='youtube') return '<span class="src-badge badge-yt">YT</span>';
+  if(t==='telegram') return '<span class="src-badge badge-tg">TG</span>';
+  return '<span class="src-badge badge-dr">DR</span>';
+}
+function thumbHtml(capa, size=40){
+  if(capa) return `<img src="${capa}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+  return '<span style="color:rgba(255,255,255,.2);font-size:13px">♪</span>';
+}
+function setActiveCards(){
+  document.querySelectorAll('[data-item-id]').forEach(el=>{
+    const isActive = currentIdx!==null && queue[currentIdx]?.id === el.dataset.itemId;
+    el.classList.toggle('active', isActive);
+  });
+}
+
+// ── Player ────────────────────────────────────────────────────────────────
+const ytContainer = document.getElementById('yt-container');
+const ytFrame = document.getElementById('yt-frame');
+const miniPlayer = document.getElementById('miniplayer');
+
+function play(item, q, autoPlay=true){
+  queue = q || [item];
+  currentIdx = queue.findIndex(x=>x.id===item.id);
+  if(currentIdx<0) currentIdx=0;
+  playing = autoPlay;
+  updatePlayer();
+  setActiveCards();
+}
+
+function updatePlayer(){
+  if(currentIdx===null || !queue[currentIdx]) return;
+  const item = queue[currentIdx];
+  const type = detectType(item.audioSrc);
+
+  // MiniPlayer info
+  document.getElementById('mp-title').textContent = item.titulo;
+  document.getElementById('mp-artist').textContent = item.artista;
+  document.getElementById('mp-src-badge').innerHTML = badge(item.audioSrc);
+  const mpThumb = document.getElementById('mp-thumb');
+  mpThumb.innerHTML = item.capa
+    ? `<img src="${item.capa}" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : '<span style="color:rgba(255,255,255,.2);font-size:16px">♪</span>';
+  miniPlayer.classList.add('visible');
+
+  // YouTube
+  if(type==='youtube'){
+    const ytId = item.audioSrc.length===11 ? item.audioSrc : (item.audioSrc.match(/[?&]v=([a-zA-Z0-9_-]{11})/)||[])[1]||item.audioSrc;
+    ytFrame.src = playing ? `https://www.youtube.com/embed/${ytId}?autoplay=1&enablejsapi=1` : `https://www.youtube.com/embed/${ytId}`;
+    ytContainer.classList.add('visible');
+  } else {
+    ytFrame.src='';
+    ytContainer.classList.remove('visible');
+    if(type==='telegram'){
+      // mock: mostra toast
+      showToast('🔗 Telegram: endpoint /play/ seria chamado aqui (mock)');
+    }
+  }
+
+  // Ícone play/pause
+  updatePlayIcon();
+  // Barra de progresso mock
+  startProgress();
+}
+
+function updatePlayIcon(){
+  const icon = document.getElementById('mp-play-icon');
+  if(playing){
+    icon.innerHTML='<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  } else {
+    icon.innerHTML='<polygon points="5,3 19,12 5,21"/>';
+  }
+}
+
+function playerToggle(){
+  if(currentIdx===null) return;
+  playing = !playing;
+  updatePlayIcon();
+  if(playing){
+    const item = queue[currentIdx];
+    if(detectType(item.audioSrc)==='youtube'){
+      const ytId = item.audioSrc.length===11 ? item.audioSrc : item.audioSrc;
+      ytFrame.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&enablejsapi=1`;
+      ytContainer.classList.add('visible');
+    }
+    startProgress();
+  } else {
+    stopProgress();
+  }
+}
+
+function playerNext(){
+  if(currentIdx===null) return;
+  if(currentIdx+1<queue.length){ currentIdx++; updatePlayer(); setActiveCards(); }
+}
+function playerPrev(){
+  if(currentIdx===null) return;
+  if(currentIdx-1>=0){ currentIdx--; updatePlayer(); setActiveCards(); }
+}
+function playerClose(){
+  currentIdx=null; playing=false; queue=[];
+  miniPlayer.classList.remove('visible');
+  ytContainer.classList.remove('visible');
+  ytFrame.src='';
+  stopProgress();
+  progressVal=0;
+  document.getElementById('mp-bar').style.width='0%';
+  setActiveCards();
+}
+
+function startProgress(){
+  stopProgress();
+  if(!playing) return;
+  progressTimer = setInterval(()=>{
+    progressVal = Math.min(progressVal+0.5, 100);
+    document.getElementById('mp-bar').style.width = progressVal+'%';
+    if(progressVal>=100){ progressVal=0; playerNext(); }
+  },150);
+}
+function stopProgress(){ clearInterval(progressTimer); }
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg){
+  const t = document.createElement('div');
+  t.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,.97);color:#fff;font-size:11px;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.12);z-index:999;white-space:nowrap;pointer-events:none';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function renderMusicas(){
+  document.getElementById('lbl-musicas').textContent = MUSICAS.length+' faixas';
+  document.getElementById('list-musicas').innerHTML = MUSICAS.map(item=>{
+    const isActive = currentIdx!==null && queue[currentIdx]?.id===item.id;
+    return `<button class="music-card${isActive?' active':''}" data-item-id="${item.id}" onclick='playItem(${JSON.stringify(item)},"musicas")'>
+      <div class="thumb">${thumbHtml(item.capa,80)}</div>
+      <div class="track-info">
+        <div class="track-title">${item.titulo}</div>
+        <div class="track-artist">${item.artista}</div>
+      </div>
+      ${badge(item.audioSrc)}
+    </button>`;
+  }).join('');
+}
+
+function renderVideos(){
+  document.getElementById('lbl-videos').textContent = VIDEOS.length+' clipes';
+  document.getElementById('list-videos').innerHTML = VIDEOS.map(item=>{
+    const isActive = currentIdx!==null && queue[currentIdx]?.id===item.id;
+    return `<button class="video-card${isActive?' active':''}" data-item-id="${item.id}" onclick='playItem(${JSON.stringify(item)},"videos")'>
+      ${item.capa?`<img src="${item.capa}" alt="" loading="lazy">`:'<span style="position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.2);font-size:20px">▶</span>'}
+      <div class="video-grad"></div>
+      <div class="video-meta">
+        <div class="video-title">${item.titulo}</div>
+        <div class="video-artist">${item.artista}</div>
+      </div>
+      <div class="video-badge-pos">${badge(item.audioSrc)}</div>
+    </button>`;
+  }).join('');
+}
+
+function renderCharts(){
+  const data = CHARTS[currentChartTab];
+  document.getElementById('list-charts').innerHTML = data.map((item,i)=>{
+    const isActive = currentIdx!==null && queue[currentIdx]?.id===item.id;
+    return `<button class="chart-row${isActive?' active':''}" data-item-id="${item.id}" onclick='playItem(${JSON.stringify(item)},"charts")'>
+      <span class="chart-pos">${i+1}</span>
+      <div class="chart-thumb">${thumbHtml(item.capa,64)}</div>
+      <div class="chart-info">
+        <div class="chart-title">${item.titulo}</div>
+        <div class="chart-artist">${item.artista}</div>
+      </div>
+      <div class="chart-right">${badge(item.audioSrc)}</div>
+    </button>`;
+  }).join('');
+}
+
+function playItem(item, context){
+  let q;
+  if(context==='musicas') q=MUSICAS;
+  else if(context==='videos') q=VIDEOS;
+  else q=CHARTS[currentChartTab];
+  play(item, q, true);
+  setTimeout(()=>{
+    renderMusicas(); renderVideos(); renderCharts();
+  },50);
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab, btn){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  if(btn) btn.classList.add('active');
+  else {
+    const b = document.querySelector(`[data-tab="${tab}"]`);
+    if(b) b.classList.add('active');
+  }
+}
+
+function switchChartTab(tab, btn){
+  currentChartTab = tab;
+  document.querySelectorAll('.chart-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCharts();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderMusicas();
+renderVideos();
+renderCharts();
+</script>
+</body>
+</html>
