@@ -7,23 +7,13 @@ import {
   type ReactNode,
 } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipos
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** "telegram" = arquivo hospedado via API intermediária Telegram */
-export type MediaType = "drive" | "youtube" | "telegram";
+export type MediaType = "drive" | "youtube";
 
 export type PlayItem = {
   id: string;
   titulo: string;
   artista: string;
   capa: string;
-  /**
-   * Drive file-id puro        → detectado como "drive"
-   * YouTube video-id (11 ch)  → detectado como "youtube"
-   * "tg:<file_id>"            → detectado como "telegram"
-   */
   audioSrc: string;
   letra?: string;
   categoria: "musica" | "musicvideo" | "video";
@@ -50,15 +40,9 @@ type PlayContextType = {
   confirmPlaying: () => void;
   confirmPaused: () => void;
   onEnded: () => void;
-  /** @deprecated */
   iframeSrc: null;
-  /** @deprecated */
   syncPlaying: (v: boolean) => void;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function extractDriveId(str: string): string | null {
   if (!str) return null;
@@ -85,58 +69,26 @@ export function extractYouTubeId(str: string): string | null {
   return null;
 }
 
-/** Remove prefixo "tg:" ou "tg_file:" e retorna o file_id puro */
-export function extractTelegramFileId(str: string): string | null {
-  if (!str) return null;
-  if (str.startsWith("tg:")) return str.slice(3);
-  if (str.startsWith("tg_file:")) return str.slice(8);
-  return null;
-}
-
 export function detectMediaType(audioSrc: string): MediaType {
   if (!audioSrc) return "drive";
   const s = audioSrc.trim();
-
-  // Telegram — prefixo explícito
-  if (s.startsWith("tg:") || s.startsWith("tg_file:")) return "telegram";
-
-  // YouTube
   if (
     s.includes("youtube") ||
     s.includes("youtu.be") ||
     /^[a-zA-Z0-9_-]{11}$/.test(s)
-  ) return "youtube";
-
-  // Drive (default)
+  ) {
+    return "youtube";
+  }
   return "drive";
 }
 
-/**
- * Stream do Google Drive via proxy Cloudflare Worker.
- */
 export function driveStreamUrl(idOrUrl: string): string {
   const id = extractDriveId(idOrUrl) ?? idOrUrl;
   return `https://empire-media-api.empirerpg-forum.workers.dev/?id=${id}`;
 }
 
-/**
- * Stream do Telegram via API intermediária local/produção.
- * O front NUNCA fala diretamente com o Bot API.
- */
-export function telegramStreamUrl(fileId: string): string {
-  const id = extractTelegramFileId(fileId) ?? fileId;
-  const base = import.meta.env.VITE_TELEGRAM_API_BASE ?? "http://localhost:3001";
-  return `${base}/play/${id}`;
-}
-
-/** @deprecated use driveStreamUrl */
 export const driveAudioPreview = driveStreamUrl;
-/** @deprecated use driveStreamUrl */
 export const driveProxyUrl = driveStreamUrl;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Context
-// ─────────────────────────────────────────────────────────────────────────────
 
 const PlayContext = createContext<PlayContextType | null>(null);
 
@@ -160,8 +112,6 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const currentMediaId: string | null = currentItem
     ? mediaType === "youtube"
       ? (extractYouTubeId(currentItem.audioSrc) ?? currentItem.audioSrc)
-      : mediaType === "telegram"
-      ? (extractTelegramFileId(currentItem.audioSrc) ?? currentItem.audioSrc)
       : (extractDriveId(currentItem.audioSrc) ?? currentItem.audioSrc)
     : null;
 
@@ -193,7 +143,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const pause = useCallback(() => {
     if (audioRef.current) audioRef.current.pause();
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.pauseVideo(); } catch { /* */ }
+      try { ytPlayerRef.current.pauseVideo(); } catch { /* YT não iniciado */ }
     }
     setState((s) => ({ ...s, playing: false }));
   }, []);
