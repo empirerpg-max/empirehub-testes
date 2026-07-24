@@ -1,12 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import {
   usePlay,
-  driveStreamUrl,
+  resolveStreamUrl,
   detectMediaType,
   extractYouTubeId,
   extractDriveId,
 } from '@/lib/playContext'
-import { ChevronLeft, ChevronRight, X, Music } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Music, AlertCircle } from 'lucide-react'
 
 // YT API type shim
 declare global {
@@ -49,29 +49,41 @@ export function MiniPlayer() {
   } = usePlay()
 
   const { queue, currentIdx, playing } = state
-  const ytContainerRef = useRef<HTMLDivElement>(null)
-  const ytApiReady = useRef(false)
-  const ytActiveId = useRef<string | null>(null)
-  const pendingPlay = useRef(false)
+  const ytContainerRef  = useRef<HTMLDivElement>(null)
+  const ytApiReady      = useRef(false)
+  const ytActiveId      = useRef<string | null>(null)
+  const pendingPlay     = useRef(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
 
-  // 1. Cria <audio> nativo uma única vez
+  // ── Expõe presença do player ao CSS (padding dinâmico) ──────────────────
+  useEffect(() => {
+    const root = document.documentElement
+    if (currentIdx !== null && queue.length > 0) {
+      root.classList.add('has-player')
+    } else {
+      root.classList.remove('has-player')
+    }
+  }, [currentIdx, queue.length])
+
+  // ── 1. Cria <audio> nativo uma única vez ────────────────────────────────
   useEffect(() => {
     if (audioRef.current) return
     const audio = new Audio()
-    audio.preload = 'none'
+    audio.preload = 'metadata'          // permite seeking sem pre-buffer total
     audio.crossOrigin = 'anonymous'
-    audio.addEventListener('play', confirmPlaying)
+    audio.addEventListener('play',  confirmPlaying)
     audio.addEventListener('pause', confirmPaused)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('error', () => {
       confirmPaused()
-      console.error('[MiniPlayer] Erro ao carregar mídia')
+      setAudioError('Erro ao carregar a mídia. Tente novamente.')
     })
+    audio.addEventListener('playing', () => setAudioError(null))
     audioRef.current = audio
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 2. Cria / recria YT.Player
+  // ── 2. Cria / recria YT.Player ──────────────────────────────────────────
   const buildYTPlayer = useCallback(
     (videoId: string, autoStart: boolean) => {
       if (!ytContainerRef.current) return
@@ -95,10 +107,10 @@ export function MiniPlayer() {
           onStateChange(e: { data: number }) {
             const S = window.YT.PlayerState
             if (e.data === S.PLAYING) confirmPlaying()
-            if (e.data === S.PAUSED) confirmPaused()
-            if (e.data === S.ENDED) onEnded()
+            if (e.data === S.PAUSED)  confirmPaused()
+            if (e.data === S.ENDED)   onEnded()
           },
-          onError() { confirmPaused() },
+          onError() { confirmPaused(); setAudioError('Erro ao carregar o vídeo do YouTube.') },
         },
       })
     },
@@ -114,16 +126,22 @@ export function MiniPlayer() {
 
   useLoadYTApi(onYTApiReady)
 
-  // 3. Troca de faixa — configura src
+  // ── 3. Troca de faixa — configura src ───────────────────────────────────
   useEffect(() => {
     if (!currentMediaId) return
-    if (mediaType === 'drive') {
-      const audio = audioRef.current
+    setAudioError(null)
+    const audio = audioRef.current
+
+    if (mediaType === 'drive' || mediaType === 'telegram') {
       if (!audio) return
+      const currentItem = currentIdx !== null ? queue[currentIdx] : null
+      if (!currentItem) return
       audio.pause()
-      audio.src = driveStreamUrl(currentMediaId)
+      // resolveStreamUrl trata tg:, drive e URLs diretas de forma unificada
+      audio.src = resolveStreamUrl(currentItem.audioSrc)
       audio.load()
     }
+
     if (mediaType === 'youtube') {
       if (!ytApiReady.current) return
       if (ytActiveId.current !== currentMediaId) buildYTPlayer(currentMediaId, false)
@@ -131,12 +149,15 @@ export function MiniPlayer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMediaId, mediaType])
 
-  // 4. Auto-play quando playing=true
+  // ── 4. Auto-play quando playing=true ────────────────────────────────────
   useEffect(() => {
     if (!currentMediaId || !playing) return
     const id = setTimeout(() => {
-      if (mediaType === 'drive') {
-        audioRef.current?.play().catch(() => confirmPaused())
+      if (mediaType === 'drive' || mediaType === 'telegram') {
+        audioRef.current?.play().catch(() => {
+          confirmPaused()
+          setAudioError('Não foi possível iniciar a reprodução.')
+        })
       }
       if (mediaType === 'youtube') {
         if (ytPlayerRef.current) {
@@ -151,15 +172,18 @@ export function MiniPlayer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMediaId, playing])
 
-  // 5. Cleanup
+  // ── 5. Cleanup ──────────────────────────────────────────────────────────
   useEffect(() => {
     return () => { audioRef.current?.pause() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const triggerPlay = useCallback(() => {
-    if (mediaType === 'drive') {
-      audioRef.current?.play().catch(() => confirmPaused())
+    if (mediaType === 'drive' || mediaType === 'telegram') {
+      audioRef.current?.play().catch(() => {
+        confirmPaused()
+        setAudioError('Não foi possível iniciar a reprodução.')
+      })
       return
     }
     if (mediaType === 'youtube') {
@@ -174,7 +198,7 @@ export function MiniPlayer() {
 
   if (currentIdx === null || queue.length === 0) return null
 
-  const item = queue[currentIdx]
+  const item    = queue[currentIdx]
   const hasPrev = currentIdx > 0
   const hasNext = currentIdx < queue.length - 1
 
@@ -190,6 +214,22 @@ export function MiniPlayer() {
 
   return (
     <div className="fixed bottom-16 inset-x-0 z-40 bg-card border-t border-white/10 shadow-2xl">
+      {/* Faixa de erro — visível ao usuário quando <audio> falha */}
+      {audioError && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-red-950/80 border-b border-red-500/30">
+          <AlertCircle className="size-3.5 text-red-400 flex-shrink-0" />
+          <p className="text-[11px] text-red-300 truncate">{audioError}</p>
+          <button
+            onClick={() => setAudioError(null)}
+            className="ml-auto text-red-400 hover:text-red-200"
+            aria-label="Fechar erro"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Container oculto do YT IFrame */}
       {mediaType === 'youtube' && (
         <div
           style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', zIndex: -1, overflow: 'hidden' }}
@@ -198,7 +238,9 @@ export function MiniPlayer() {
           <div ref={ytContainerRef} />
         </div>
       )}
+
       <div className="mx-auto max-w-2xl px-4 py-2 flex items-center gap-3">
+        {/* Capa */}
         <div className="size-10 rounded-lg overflow-hidden bg-primary/10 flex-shrink-0">
           {item.capa ? (
             <img src={driveImg(item.capa, 80)} alt={item.titulo} className="w-full h-full object-cover" loading="lazy" decoding="async" />
@@ -206,25 +248,55 @@ export function MiniPlayer() {
             <div className="w-full h-full grid place-items-center"><Music className="size-4 text-primary" /></div>
           )}
         </div>
+
+        {/* Info */}
         <div className="min-w-0 flex-1">
           <p className="text-xs font-black truncate uppercase tracking-tight">{item.titulo}</p>
           <p className="text-[10px] text-muted-foreground truncate">{item.artista}</p>
         </div>
+
+        {/* Controles */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => prev()} disabled={!hasPrev} className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity" aria-label="Anterior">
+          <button
+            onClick={() => prev()}
+            disabled={!hasPrev}
+            className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity"
+            aria-label="Anterior"
+          >
             <ChevronLeft className="size-4" />
           </button>
-          <button onClick={handlePlayPause} className="size-9 rounded-full bg-primary text-primary-foreground grid place-items-center transition-transform active:scale-95" aria-label={playing ? 'Pausar' : 'Reproduzir'}>
+
+          <button
+            onClick={handlePlayPause}
+            className="size-9 rounded-full bg-primary text-primary-foreground grid place-items-center transition-transform active:scale-95"
+            aria-label={playing ? 'Pausar' : 'Reproduzir'}
+          >
             {playing ? (
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="4" width="4" height="16" />
+                <rect x="14" y="4" width="4" height="16" />
+              </svg>
             ) : (
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21" /></svg>
+              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
             )}
           </button>
-          <button onClick={() => next()} disabled={!hasNext} className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity" aria-label="Próxima">
+
+          <button
+            onClick={() => next()}
+            disabled={!hasNext}
+            className="size-8 grid place-items-center text-muted-foreground disabled:opacity-20 transition-opacity"
+            aria-label="Próxima"
+          >
             <ChevronRight className="size-4" />
           </button>
-          <button onClick={close} className="size-8 grid place-items-center text-muted-foreground ml-1" aria-label="Fechar player">
+
+          <button
+            onClick={close}
+            className="size-8 grid place-items-center text-muted-foreground ml-1"
+            aria-label="Fechar player"
+          >
             <X className="size-4" />
           </button>
         </div>

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
@@ -43,6 +44,14 @@
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.78 0.22 145);
+
+  /* Padding dinâmico para o conteúdo não ficar escondido atrás do MiniPlayer */
+  --player-pb: 0px;
+}
+
+/* Quando o MiniPlayer está ativo, JS adiciona .has-player no <html> */
+html.has-player {
+  --player-pb: 4rem; /* altura do MiniPlayer (bottom-16 = 64px) + BottomNav (bottom-0 = 64px) */
 }
 
 @layer base {
@@ -59,6 +68,8 @@
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
     min-height: 100vh;
+    /* Aplica o padding dinâmico em toda a página */
+    padding-bottom: var(--player-pb);
   }
   html, body, #root {
     min-height: 100vh;
