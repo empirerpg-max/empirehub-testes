@@ -1,3 +1,2 @@
-// Este arquivo não é mais usado.
-// O root route agora está em main.tsx.
+// não utilizado — roteamento migrado para React Router v6 em main.tsx
 export {}

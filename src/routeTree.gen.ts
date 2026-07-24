@@ -1,3 +1,2 @@
-// Este arquivo não é mais usado.
-// O routeTree agora está definido diretamente em main.tsx.
+// não utilizado — roteamento migrado para React Router v6 em main.tsx
 export {}

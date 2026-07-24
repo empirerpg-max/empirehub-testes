@@ -1,16 +1,13 @@
-import { Link } from '@tanstack/react-router'
+import { Link } from 'react-router-dom'
 import { Play } from 'lucide-react'
 
 export default function IndexPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 24,
-      color: '#fff',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 24, color: '#fff',
       fontFamily: 'system-ui, sans-serif',
     }}>
       <div style={{ textAlign: 'center' }}>
@@ -27,7 +24,6 @@ export default function IndexPage() {
         background: '#fff', color: '#000',
         fontWeight: 700, fontSize: 14,
         textDecoration: 'none',
-        transition: 'opacity 0.15s',
       }}>
         <Play size={16} fill="currentColor" />
         Abrir Empire Play
