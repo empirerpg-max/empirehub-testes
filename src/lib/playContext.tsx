@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import { telegramStreamUrl } from './telegramStorage'
+import { telegramStreamUrl, isTelegramSrc } from './telegramStorage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ export function extractTelegramFileId(str: string): string | null {
 export function detectMediaType(audioSrc: string): MediaType {
   if (!audioSrc) return 'drive'
   const s = audioSrc.trim()
-  if (s.startsWith('tg:')) return 'telegram'
+  if (isTelegramSrc(s)) return 'telegram'
   if (s.includes('youtube') || s.includes('youtu.be') || /^[a-zA-Z0-9_-]{11}$/.test(s)) {
     return 'youtube'
   }
@@ -106,18 +106,21 @@ export function driveStreamUrl(idOrUrl: string): string {
 /**
  * Resolve a URL de stream para qualquer tipo de mídia.
  * Use esta função no MiniPlayer em vez de chamar cada helper diretamente.
+ *
+ * Garante que audioSrc com prefixo 'tg:' seja sempre resolvido via
+ * telegramStreamUrl (que já faz o strip do prefixo internamente).
  */
 export function resolveStreamUrl(audioSrc: string): string {
   const type = detectMediaType(audioSrc)
-  if (type === 'telegram') return telegramStreamUrl(audioSrc)
+  if (type === 'telegram') return telegramStreamUrl(audioSrc) // telegramStreamUrl já strip 'tg:'
   if (type === 'drive')    return driveStreamUrl(audioSrc)
   // YouTube não usa <audio> — é controlado via ytPlayerRef
   return audioSrc
 }
 
-/** @deprecated */
+/** @deprecated use resolveStreamUrl */
 export const driveAudioPreview = driveStreamUrl
-/** @deprecated */
+/** @deprecated use resolveStreamUrl */
 export const driveProxyUrl = driveStreamUrl
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -141,10 +144,10 @@ export function PlayProvider({ children }: { children: ReactNode }) {
 
   const currentMediaId: string | null = currentItem
     ? mediaType === 'youtube'
-      ? (extractYouTubeId(currentItem.audioSrc)    ?? currentItem.audioSrc)
+      ? (extractYouTubeId(currentItem.audioSrc)        ?? currentItem.audioSrc)
       : mediaType === 'telegram'
         ? (extractTelegramFileId(currentItem.audioSrc) ?? currentItem.audioSrc)
-        : (extractDriveId(currentItem.audioSrc)    ?? currentItem.audioSrc)
+        : (extractDriveId(currentItem.audioSrc)        ?? currentItem.audioSrc)
     : null
 
   const confirmPlaying = useCallback(() => setState((s) => ({ ...s, playing: true })), [])
@@ -163,7 +166,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const pause = useCallback(() => {
     if (audioRef.current) audioRef.current.pause()
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.pauseVideo() } catch { /* */ }
+      try { ytPlayerRef.current.pauseVideo() } catch { /* noop */ }
     }
     setState((s) => ({ ...s, playing: false }))
   }, [])
@@ -173,7 +176,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = '' }
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.stopVideo() } catch { /* */ }
+      try { ytPlayerRef.current.stopVideo() } catch { /* noop */ }
     }
     setState({ queue: [], currentIdx: null, playing: false })
   }, [])

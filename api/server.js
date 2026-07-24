@@ -8,7 +8,7 @@
  *   POST /upload            — upload de arquivo → Telegram → salva no catálogo
  *   POST /catalog           — registra mídia YT ou Drive (sem upload)
  *   GET  /catalog           — lista o catálogo completo
- *   GET  /play/:fileId      — resolve getFile e faz pipe do stream
+ *   GET  /play/:fileId      — resolve getFile e faz pipe do stream (com Range)
  *   DELETE /catalog/:fileId — remove do catálogo (não apaga do Telegram)
  *   GET  /health            — healthcheck
  *
@@ -29,14 +29,14 @@ const fs       = require('fs')
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-const PORT     = process.env.PORT || 3001
-const TOKEN    = process.env.BOT_TOKEN
-const CHAT_ID  = process.env.CHAT_ID
+const PORT    = process.env.PORT || 3001
+const TOKEN   = process.env.BOT_TOKEN
+const CHAT_ID = process.env.CHAT_ID
 
 // Para usar o Local Bot API Server (--local), defina TELEGRAM_API_ROOT no .env
 // Ex: TELEGRAM_API_ROOT=http://localhost:8081/bot
-const TG_ROOT  = (process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org/bot').replace(/\/$/, '')
-const TG_FILE  = TG_ROOT.replace('/bot', '/file/bot')
+const TG_ROOT = (process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org/bot').replace(/\/$/, '')
+const TG_FILE = TG_ROOT.replace('/bot', '/file/bot')
 
 if (!TOKEN || !CHAT_ID) {
   console.error('[empire-api] ERRO: BOT_TOKEN e CHAT_ID são obrigatórios no .env')
@@ -118,6 +118,20 @@ async function tgUploadFile(buffer, filename, mimeType, meta) {
   return json.result
 }
 
+/**
+ * Parseia o header Range e retorna { start, end } ou null.
+ * Ex: "bytes=0-1023" → { start: 0, end: 1023 }
+ */
+function parseRange(rangeHeader, totalSize) {
+  if (!rangeHeader) return null
+  const m = rangeHeader.match(/bytes=(\d+)-(\d*)/)
+  if (!m) return null
+  const start = parseInt(m[1], 10)
+  const end   = m[2] ? parseInt(m[2], 10) : totalSize - 1
+  if (isNaN(start) || start >= totalSize) return null
+  return { start, end: Math.min(end, totalSize - 1) }
+}
+
 // ── Rotas ────────────────────────────────────────────────────────────────────
 
 /** GET /health */
@@ -138,7 +152,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     const result   = await tgUploadFile(buffer, originalname, mimetype, meta)
 
-    // Extrai o objeto de mídia retornado pelo Telegram
     const media    = result.audio || result.video || result.document || {}
     const file_id  = media.file_id  || ''
     const duration = media.duration || 0
@@ -157,7 +170,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     insertMedia.run(row)
-
     res.json(row)
   } catch (err) {
     console.error('[/upload]', err)
@@ -170,7 +182,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
  * Registra mídia de YouTube ou Drive sem fazer upload.
  * Body JSON: { file_id, source, titulo, artista, capa, mime_type }
  *   source: 'youtube' | 'drive'
- *   file_id: YouTube video-id ou Drive file-id
  */
 app.post('/catalog', async (req, res) => {
   try {
@@ -181,7 +192,7 @@ app.post('/catalog', async (req, res) => {
       file_id,
       message_id: 0,
       chat_id:    '',
-      source:     source,
+      source,
       mime_type:  mime_type || '',
       file_size:  0,
       duration:   0,
@@ -209,38 +220,81 @@ app.get('/catalog', (_req, res) => {
 
 /**
  * GET /play/:fileId
- * Resolve getFile no Bot API e faz pipe do stream para o cliente.
- * O <audio> do front recebe os bytes diretamente.
  *
- * LIMITE: Bot API cloud só serve download até 20 MB.
- * Para arquivos maiores, use o Local Bot API Server com --local.
- * Nesse modo, file_path é um caminho absoluto e o download é ilimitado.
+ * Resolve getFile no Bot API e faz pipe do stream para o cliente.
+ * Suporta Range requests (obrigatório para Safari e seeking no <audio>/<video>).
+ *
+ * Modos de operação:
+ *
+ *   1. Local Bot API Server (--local)
+ *      file_path retorna caminho absoluto no disco.
+ *      Usamos fs.createReadStream com range manual — suporte completo a seeking.
+ *      Sem limite de tamanho.
+ *
+ *   2. Bot API cloud
+ *      file_path é um path relativo. Montamos a URL temporária (válida 1h).
+ *      Download máximo: 20 MB. Range: fazemos pipe com header Range repassado.
+ *      Para arquivos maiores, migrate para Local Bot API Server.
  */
 app.get('/play/:fileId', async (req, res) => {
   try {
     const { fileId } = req.params
+    const rangeHeader = req.headers['range']
 
-    const fileInfo  = await tgCall('getFile', { file_id: fileId })
-    const filePath  = fileInfo.file_path
+    const fileInfo = await tgCall('getFile', { file_id: fileId })
+    const filePath = fileInfo.file_path
+    const fileSize = fileInfo.file_size || 0
 
-    // Local Bot API Server retorna caminho absoluto — servir direto do disco
+    // ── Modo 1: Local Bot API — caminho absoluto no disco ────────────────────
     if (filePath && path.isAbsolute(filePath)) {
-      if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Arquivo não encontrado no disco' })
-      return res.sendFile(filePath)
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Arquivo não encontrado no disco' })
+      }
+
+      const stat = fs.statSync(filePath)
+      const total = stat.size
+      const mimeType = lookupMime(filePath)
+
+      res.setHeader('Accept-Ranges', 'bytes')
+      res.setHeader('Content-Type', mimeType)
+
+      const range = parseRange(rangeHeader, total)
+      if (range) {
+        const { start, end } = range
+        res.status(206)
+        res.setHeader('Content-Range',  `bytes ${start}-${end}/${total}`)
+        res.setHeader('Content-Length', end - start + 1)
+        fs.createReadStream(filePath, { start, end }).pipe(res)
+      } else {
+        res.setHeader('Content-Length', total)
+        fs.createReadStream(filePath).pipe(res)
+      }
+      return
     }
 
-    // Bot API cloud — monta URL temporária (válida por 1h) e faz pipe
-    const fileUrl   = `${TG_FILE}${TOKEN}/${filePath}`
-    const upstream  = await fetch(fileUrl)
+    // ── Modo 2: Bot API cloud — URL temporária ───────────────────────────────
+    const fileUrl = `${TG_FILE}${TOKEN}/${filePath}`
 
-    if (!upstream.ok) return res.status(502).json({ error: 'Falha ao buscar arquivo no Telegram' })
+    const headers = {}
+    if (rangeHeader) headers['Range'] = rangeHeader
 
-    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream')
-    const cl = upstream.headers.get('content-length')
-    if (cl) res.setHeader('Content-Length', cl)
+    const upstream = await fetch(fileUrl, { headers })
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(502).json({ error: `Falha ao buscar arquivo no Telegram: HTTP ${upstream.status}` })
+    }
+
+    const contentType   = upstream.headers.get('content-type')   || 'application/octet-stream'
+    const contentLength = upstream.headers.get('content-length')
+    const contentRange  = upstream.headers.get('content-range')
+
     res.setHeader('Accept-Ranges', 'bytes')
+    res.setHeader('Content-Type', contentType)
     res.setHeader('Cache-Control', 'no-store')
+    if (contentLength) res.setHeader('Content-Length', contentLength)
+    if (contentRange)  res.setHeader('Content-Range',  contentRange)
 
+    res.status(rangeHeader ? 206 : 200)
     upstream.body.pipe(res)
   } catch (err) {
     console.error('[/play]', err)
@@ -257,6 +311,24 @@ app.delete('/catalog/:fileId', (req, res) => {
     res.status(500).json({ error: err.message })
   }
 })
+
+// ── MIME helper simples (sem dependência extra) ──────────────────────────────
+
+function lookupMime(filePath) {
+  const ext = path.extname(filePath).toLowerCase()
+  const map = {
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.wav': 'audio/wav',
+    '.flac': 'audio/flac',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mkv': 'video/x-matroska',
+    '.mov': 'video/quicktime',
+  }
+  return map[ext] || 'application/octet-stream'
+}
 
 // ── Start ────────────────────────────────────────────────────────────────────
 
