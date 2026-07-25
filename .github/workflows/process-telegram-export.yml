@@ -1,0 +1,39 @@
+name: Processar Export do Telegram
+
+on:
+  push:
+    paths:
+      - 'resultvideo-12.json'
+  workflow_dispatch:
+
+jobs:
+  processar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verificar se o JSON existe
+        run: |
+          if [ ! -f resultvideo-12.json ]; then
+            echo "::error::Arquivo resultvideo-12.json nao encontrado na raiz do repositorio"
+            exit 1
+          fi
+          echo "Arquivo encontrado. Tamanho: $(du -sh resultvideo-12.json)"
+
+      - name: Processar export e gerar planilha
+        run: node api/scripts/process-telegram-export.js resultvideo-12.json
+
+      - name: Commitar arquivos gerados
+        run: |
+          git config user.name "Empire Bot"
+          git config user.email "bot@empiregame.app"
+          git add api/data/videos-data.json api/data/videos-export.csv
+          git diff --staged --quiet && echo "Nenhuma mudanca" || (git commit -m "data: regenerar videos-data.json e videos-export.csv [skip ci]" && git push)
