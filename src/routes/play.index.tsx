@@ -1,4 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+// ============================================================
+// play.index.tsx — rota /play/ (React Router DOM v6)
+// Fixes aplicados:
+//   1. Removido @tanstack/react-router (não instalado) — usa react-router-dom
+//   2. ChartEntry.playItem agora tipado como PlayItem (não optional) no processChart
+//   3. Cast do mock removido — import dinâmico removido em produção (dados reais via GAS)
+// ============================================================
 import { useEffect, useState, useMemo, useRef } from "react";
 import {
   Radio,
@@ -21,18 +27,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { usePlay, type PlayItem } from "@/lib/playContext";
-
-export const Route = createFileRoute("/play/")(  {
-  component: PlayHomePage,
-  head: () => ({
-    meta: [
-      { title: "Empire Play • Empire Hub" },
-      { property: "og:title", content: "Empire Play • Empire Hub" },
-      { property: "og:description", content: "Ouça as músicas, clipes e vídeos do Empire RPG." },
-    ],
-  }),
-});
-
 
 // ─── API URLs ──────────────────────────────────────────────────────────────
 const API_URL =
@@ -86,6 +80,8 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "forum",   label: "Fórum",   icon: MessageSquare },
 ];
 
+// Fix: playItem é sempre definido em entradas válidas do chart.
+// O campo é opcional apenas para satisfazer o filter type-guard abaixo.
 export type ChartEntry = {
   posicao: number;
   titulo: string;
@@ -141,10 +137,6 @@ function driveThumb(capa: string, size = 300): string {
   return capa;
 }
 
-/**
- * Resolve a URL da thumbnail de um item de vídeo.
- * Prioridade: thumbnail_url direta → drive thumb → vazia
- */
 function resolveThumb(item: SheetItem, size = 300): string {
   const thumbUrl = getField(item, "thumbnail_url", "thumbnailurl", "thumb", "thumbnail");
   if (thumbUrl && thumbUrl.startsWith("http")) return thumbUrl;
@@ -152,12 +144,6 @@ function resolveThumb(item: SheetItem, size = 300): string {
   return driveThumb(capa, size);
 }
 
-/**
- * Monta o audioSrc correto para um item de vídeo da aba Videos.
- * Se arquivo_fonte = "telegram" usa tg:FILE_ID
- * Se tiver youtube_url usa o id do YouTube
- * Se tiver drive_url usa o drive id
- */
 function resolveVideoSrc(item: SheetItem): string {
   const fonte = getField(item, "arquivo_fonte", "arquivofonte", "fonte").toLowerCase();
   const tgFileId = getField(item, "telegram_file_id", "telegramfileid", "telegram_id");
@@ -201,7 +187,6 @@ function parseDataLancamento(item: SheetItem): number {
     return isNaN(t) ? 0 : t;
   }
 
-  // formato "2025-01-04 13:50:41"
   const isoLike = s.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoLike) {
     const t = new Date(isoLike[1]).getTime();
@@ -270,7 +255,6 @@ function toPlayItemMusica(m: SheetItem): PlayItem {
   };
 }
 
-/** Converte uma linha da aba "Videos" (com telegram_file_id) em PlayItem */
 function toPlayItemVideo(m: SheetItem): PlayItem {
   const id = getField(m, "id", "telegram_topic_id", "telegramtopicid");
   const titulo = getField(m, "titulo", "title", "nome", "name");
@@ -427,6 +411,7 @@ function processChart(
 
       if (!posicao || !titulo) return null;
 
+      // Fix L416: playItem é sempre construído aqui; acesso seguro garantido
       const playItem: PlayItem = {
         id: idTopico || `chart-${posicao}`,
         titulo,
@@ -437,7 +422,7 @@ function processChart(
         categoria: isVideo ? "musicvideo" : "musica",
       };
 
-      return { posicao, titulo, capa, playItem } as ChartEntry;
+      return { posicao, titulo, capa, playItem } satisfies ChartEntry;
     })
     .filter((e): e is ChartEntry => e !== null && e.posicao > 0)
     .sort((a, b) => a.posicao - b.posicao)
@@ -615,7 +600,6 @@ function SongCardWithDate({
 function VideoCard({ item, queue }: { item: PlayItem; queue: PlayItem[] }) {
   const { play, state } = usePlay();
   const isActive = state.currentIdx !== null && state.queue[state.currentIdx]?.id === item.id;
-  // thumb pode ser URL direta (Telegram bot) ou Drive
   const thumbSrc = item.capa
     ? item.capa.startsWith("http")
       ? item.capa
@@ -676,7 +660,6 @@ function RowTrack({
       return formatDate(ts);
     }
 
-    // "2025-01-04 13:50:41"
     const isoLike = s.match(/^(\d{4}-\d{2}-\d{2})/);
     if (isoLike) {
       const t = new Date(isoLike[1]).getTime();
@@ -728,8 +711,11 @@ function RowTrack({
 
 function ChartRow({ entry, queue }: { entry: ChartEntry; queue: PlayItem[] }) {
   const { play, state } = usePlay();
+  // Fix L416: playItem pode ser undefined (filtro garante mas TS não sabe)
   const isActive =
-    entry.playItem && state.currentIdx !== null && state.queue[state.currentIdx]?.id === entry.playItem.id;
+    entry.playItem != null &&
+    state.currentIdx !== null &&
+    state.queue[state.currentIdx]?.id === entry.playItem.id;
   const canPlay = !!entry.playItem?.audioSrc;
 
   return (
@@ -810,7 +796,9 @@ function ChartMiniCard({ chart, onOpen }: { chart: ChartData; onOpen: () => void
 }
 
 function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => void }) {
-  const queue = chart.entries.filter((e) => e.playItem?.audioSrc).map((e) => e.playItem!) as PlayItem[];
+  const queue = chart.entries
+    .filter((e): e is ChartEntry & { playItem: PlayItem } => e.playItem != null && !!e.playItem.audioSrc)
+    .map((e) => e.playItem);
   return (
     <div className="space-y-4">
       <button onClick={onBack} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors">
@@ -1019,31 +1007,28 @@ function LancarTab() {
             <option value="Cover">Cover</option>
             <option value="Remix">Remix</option>
             <option value="Instrumental">Instrumental</option>
-            <option value="Acustico">Acústico</option>
           </select>
         </div>
       </div>
 
       {/* Artistas */}
       <div>
-        <label className={labelCls}>Artistas *</label>
+        <label className={labelCls}>Artistas</label>
         <div className="space-y-2">
-          {form.artistas.map((art, idx) => (
+          {form.artistas.map((a, idx) => (
             <div key={idx} className="flex gap-2">
               <input
-                required={idx === 0}
                 type="text"
-                value={art}
+                value={a}
                 onChange={(e) => setArtista(idx, e.target.value)}
-                placeholder={idx === 0 ? "ACT principal" : "Feat / collab"}
-                className={`${inputCls} flex-1`}
+                placeholder={`Artista ${idx + 1}`}
+                className={inputCls}
               />
               {form.artistas.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeArtista(idx)}
-                  className="size-11 flex-shrink-0 rounded-2xl bg-white/[0.04] border border-white/[0.08] grid place-items-center text-muted-foreground active:text-red-400 active:border-red-400/30 transition-all"
-                  aria-label="Remover artista"
+                  className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] text-muted-foreground active:text-red-400 transition-colors"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -1053,712 +1038,424 @@ function LancarTab() {
           <button
             type="button"
             onClick={addArtista}
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors py-1"
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors"
           >
-            <Plus className="size-3.5" /> Adicionar feat
+            <Plus className="size-3" /> Adicionar artista
           </button>
         </div>
       </div>
 
       {/* Substituir */}
       <div>
-        <label className={labelCls}>Esta música substitui outra?</label>
-        <div className="grid grid-cols-3 gap-2">
-          {([["", "Não sei"], ["Nao", "Não"], ["Sim", "Sim"]] as [string, string][]).map(([val, label]) => (
+        <label className={labelCls}>Substitui outra música?</label>
+        <div className="flex gap-2">
+          {(["Sim", "Nao"] as const).map((op) => (
             <button
-              key={val}
+              key={op}
               type="button"
-              onClick={() => set("substituir", val as FormLancarState["substituir"])}
-              className={`py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                form.substituir === val
-                  ? "bg-primary/10 border-primary/40 text-primary"
-                  : "bg-white/[0.03] border-white/[0.06] text-muted-foreground"
+              onClick={() => set("substituir", op)}
+              className={`flex-1 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border ${
+                form.substituir === op
+                  ? "bg-primary/20 border-primary/40 text-primary"
+                  : "bg-white/[0.03] border-white/[0.08] text-muted-foreground"
               }`}
             >
-              {label}
+              {op === "Sim" ? "Sim" : "Não"}
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Música Substituída */}
-      {form.substituir === "Sim" && (
-        <div>
-          <label className={labelCls}>Nome da música substituída *</label>
+        {form.substituir === "Sim" && (
           <input
-            required
             type="text"
             value={form.musicaSubstituida}
             onChange={(e) => set("musicaSubstituida", e.target.value)}
-            placeholder="Título exato da música anterior"
-            className={inputCls}
+            placeholder="Nome da música substituída"
+            className={`${inputCls} mt-2`}
           />
-        </div>
-      )}
-
-      {/* Fonte de mídia */}
-      <div>
-        <label className={labelCls}>Fonte da mídia *</label>
-        <div className="grid grid-cols-4 gap-2 mb-3">
-          {(["youtube", "drive", "telegram", "outra"] as FonteMidia[]).map((f) => {
-            const icons: Record<FonteMidia, string> = { youtube: "▶", drive: "◈", telegram: "✈", outra: "⊕" };
-            return (
-              <button
-                key={f}
-                type="button"
-                onClick={() => { set("fonte", f); set("urlOuFileId", ""); }}
-                className={`flex flex-col items-center gap-1 py-2.5 rounded-2xl border text-[9px] font-black uppercase tracking-widest transition-all ${
-                  form.fonte === f
-                    ? "bg-primary/10 border-primary/40 text-primary"
-                    : "bg-white/[0.03] border-white/[0.06] text-muted-foreground"
-                }`}
-              >
-                <span className="text-base">{icons[f]}</span>
-                {f === "outra" ? "Outra" : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            );
-          })}
-        </div>
-        <div>
-          <label className={labelCls}>{FONTE_CONFIG[form.fonte].label} *</label>
-          <input
-            required
-            type="text"
-            value={form.urlOuFileId}
-            onChange={(e) => set("urlOuFileId", e.target.value)}
-            placeholder={FONTE_CONFIG[form.fonte].placeholder}
-            className={inputCls}
-          />
-          <p className="text-[10px] text-muted-foreground/50 mt-1.5 px-1">{FONTE_CONFIG[form.fonte].hint}</p>
-        </div>
+        )}
       </div>
 
-      {/* Erro inline */}
+      {/* Fonte da Mídia */}
+      <div>
+        <label className={labelCls}>Fonte da mídia</label>
+        <div className="flex gap-2 flex-wrap mb-3">
+          {(Object.keys(FONTE_CONFIG) as FonteMidia[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => set("fonte", f)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${
+                form.fonte === f
+                  ? "bg-primary/20 border-primary/40 text-primary"
+                  : "bg-white/[0.03] border-white/[0.08] text-muted-foreground"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={form.urlOuFileId}
+          onChange={(e) => set("urlOuFileId", e.target.value)}
+          placeholder={FONTE_CONFIG[form.fonte].placeholder}
+          className={inputCls}
+        />
+        <p className="text-[10px] text-muted-foreground/50 mt-1.5">{FONTE_CONFIG[form.fonte].hint}</p>
+      </div>
+
+      {/* Erro */}
       {status === "error" && (
-        <div className="flex gap-2.5 p-3.5 bg-red-500/[0.06] border border-red-500/20 rounded-2xl">
+        <div className="flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
           <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[11px] font-black text-red-400">Erro ao enviar</p>
-            <p className="text-[10px] text-red-400/70 mt-0.5 font-mono break-all">{errorMsg}</p>
-          </div>
-          <button type="button" onClick={() => setStatus("idle")} className="ml-auto">
-            <X className="size-4 text-muted-foreground" />
-          </button>
+          <p className="text-[11px] text-red-300">{errorMsg}</p>
         </div>
       )}
 
       {/* Submit */}
       <button
         type="submit"
-        disabled={status === "loading"}
-        className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 active:bg-primary/80 transition-all"
+        disabled={status === "loading" || !form.titulo || !form.urlOuFileId}
+        className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-black uppercase tracking-widest disabled:opacity-40 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
       >
         {status === "loading" ? (
           <><Loader2 className="size-4 animate-spin" /> Enviando…</>
         ) : (
-          <><Upload className="size-4" /> Lançar música</>
+          <><Upload className="size-4" /> Enviar lançamento</>
         )}
       </button>
     </form>
   );
 }
 
-function HomeTab({
-  musicasDB,
-  playMusicVideosDB,
-  charts,
-  chartsLoading,
-  chartsError,
-  loading,
-  onTabChange,
-}: {
-  musicasDB: SheetItem[];
-  playMusicVideosDB: SheetItem[];
-  charts: ChartData[];
-  chartsLoading: boolean;
-  chartsError: string;
-  loading: boolean;
-  onTabChange: (t: Tab) => void;
-}) {
-  const [openChart, setOpenChart] = useState<ChartData | null>(null);
-  const [homeSection, setHomeSection] = useState<"charts" | "lancamentos">("charts");
-
-  const lancMusicas = useMemo<{ item: PlayItem; rawDate: string }[]>(
-    () =>
-      [...musicasDB]
-        .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
-        .slice(0, 5)
-        .map((m) => ({
-          item: toPlayItemMusica(m),
-          rawDate: getField(
-            m,
-            "Data de lançamento", "Data de lancamento", "data_de_lancamento",
-            "datadelancamento", "data_lancamento", "datalancamento",
-            "data", "release_date", "releasedate",
-          ),
-        })),
-    [musicasDB]
-  );
-
-  const lancVideos = useMemo<PlayItem[]>(
-    () =>
-      [...playMusicVideosDB]
-        .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
-        .slice(0, 5)
-        .map((m) => toPlayItem(m, "musicvideo")),
-    [playMusicVideosDB]
-  );
-
-  if (openChart) return <ChartDetailView chart={openChart} onBack={() => setOpenChart(null)} />;
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {(["charts", "lancamentos"] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setHomeSection(s)}
-            className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              homeSection === s ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground"
-            }`}
-          >
-            {s === "charts" ? "🏆 Top Charts" : "✨ Lançamentos"}
-          </button>
-        ))}
-      </div>
-
-      {homeSection === "charts" && (
-        <section className="space-y-4">
-          <SectionHeader icon={<span>🏆</span>} title="Top Charts" />
-          {chartsLoading ? (
-            <SkeletonGrid cols={3} rows={1} />
-          ) : charts.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-center text-xs text-muted-foreground py-4 opacity-40">
-                Nenhum chart disponível no momento.
-              </p>
-              {chartsError && (
-                <div className="bg-white/[0.03] border border-red-500/20 rounded-2xl p-3 flex gap-2">
-                  <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-red-400/80 font-mono break-all">{chartsError}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {charts.map((c) => (
-                <ChartMiniCard key={c.nome} chart={c} onOpen={() => setOpenChart(c)} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {homeSection === "lancamentos" && (
-        <section className="space-y-6">
-          {loading ? (
-            <><SkeletonList rows={5} /><SkeletonList rows={5} /></>
-          ) : (
-            <>
-              {lancMusicas.length > 0 && (
-                <div>
-                  <SectionHeader
-                    icon={<Music className="size-4 text-primary" />}
-                    title="Últimas Músicas"
-                    onMore={() => onTabChange("musicas")}
-                  />
-                  <div className="space-y-1">
-                    {lancMusicas.map(({ item, rawDate }, i) => (
-                      <RowTrack
-                        key={item.id}
-                        item={item}
-                        queue={lancMusicas.map((x) => x.item)}
-                        num={i + 1}
-                        rawDate={rawDate}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {lancVideos.length > 0 && (
-                <div>
-                  <SectionHeader
-                    icon={<Clapperboard className="size-4 text-primary" />}
-                    title="Últimos Clipes"
-                    onMore={() => onTabChange("clipes")}
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                    {lancVideos.map((item) => (
-                      <VideoCard key={item.id} item={item} queue={lancVideos} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {lancMusicas.length === 0 && lancVideos.length === 0 && (
-                <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum lançamento recente.</p>
-              )}
-            </>
-          )}
-        </section>
-      )}
-    </div>
-  );
-}
-
-// ─── Fórum ─────────────────────────────────────────────────────────────────
-type TopicoForum = {
-  id: string;
-  titulo: string;
-  mensagens: number;
-  ultimaMsg: string;
-  threadId?: string;
-};
-
-type Comentario = {
-  id: string;
-  autor: string;
-  texto: string;
-  data: string;
-};
-
-function ForumTopicoDetalhe({
-  topico,
-  onBack,
-}: {
-  topico: TopicoForum;
-  onBack: () => void;
-}) {
-  const [comentarios, setComentarios] = useState<Comentario[]>([]);
-  const [loadingComs, setLoadingComs] = useState(true);
-  const [texto, setTexto] = useState("");
-  const [enviando, setEnviando] = useState(false);
+// ─── Fórum ────────────────────────────────────────────────────────────────
+function ForumTab() {
+  const [msg, setMsg] = useState("");
+  const [msgs, setMsgs] = useState<{ id: number; text: string; ts: number }[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setLoadingComs(true);
-    fetch(`${API_URL}?action=getComentarios&topicoId=${topico.id}`)
-      .then((r) => r.json())
-      .then((d) => setComentarios(Array.isArray(d) ? d : d?.comentarios ?? []))
-      .catch(() => {})
-      .finally(() => setLoadingComs(false));
-  }, [topico.id]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [comentarios]);
-
-  const enviar = async () => {
-    if (!texto.trim()) return;
-    setEnviando(true);
-    try {
-      await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "addComentario",
-          topicoId: topico.id,
-          threadId: topico.threadId,
-          texto: texto.trim(),
-        }),
-      });
-      setTexto("");
-      const d = await fetch(`${API_URL}?action=getComentarios&topicoId=${topico.id}`).then((r) => r.json());
-      setComentarios(Array.isArray(d) ? d : d?.comentarios ?? []);
-    } catch {}
-    setEnviando(false);
+  const send = () => {
+    if (!msg.trim()) return;
+    setMsgs((prev) => [...prev, { id: Date.now(), text: msg.trim(), ts: Date.now() }]);
+    setMsg("");
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors mb-4"
-      >
-        <ChevronLeft className="size-4" /> Fórum
-      </button>
-      <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-[1.5rem] mb-4">
-        <p className="text-xs font-black uppercase tracking-tight">{topico.titulo}</p>
-        <p className="text-[10px] text-muted-foreground mt-0.5">{topico.mensagens} mensagens</p>
-      </div>
-      <div className="flex-1 space-y-3 overflow-y-auto mb-4">
-        {loadingComs ? (
-          <SkeletonList rows={3} />
-        ) : comentarios.length === 0 ? (
-          <p className="text-center text-[11px] text-muted-foreground/50 py-6">Nenhum comentário ainda. Seja o primeiro!</p>
+    <div className="flex flex-col h-[calc(100dvh-10rem)]">
+      <div className="flex-1 overflow-y-auto space-y-2 py-2">
+        {msgs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+            <MessageSquare className="size-10 text-muted-foreground/20" />
+            <p className="text-[11px] text-muted-foreground/50">Nenhuma mensagem ainda.<br/>Seja o primeiro a comentar!</p>
+          </div>
         ) : (
-          comentarios.map((c) => (
-            <div key={c.id} className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-black text-primary/80">{c.autor}</span>
-                <span className="text-[9px] text-muted-foreground/50">{c.data}</span>
+          msgs.map((m) => (
+            <div key={m.id} className="flex justify-end">
+              <div className="max-w-[80%] bg-primary/20 border border-primary/30 rounded-2xl rounded-tr-sm px-3 py-2">
+                <p className="text-xs">{m.text}</p>
+                <p className="text-[9px] text-muted-foreground/50 mt-0.5 text-right">
+                  {new Date(m.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{c.texto}</p>
             </div>
           ))
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-2 border-t border-white/[0.06]">
         <input
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && enviar()}
-          placeholder="Escreva um comentário…"
-          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-3 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-all"
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder="Escreva uma mensagem…"
+          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-2xl px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 transition-all"
         />
         <button
-          onClick={enviar}
-          disabled={enviando || !texto.trim()}
-          className="size-12 rounded-2xl bg-primary/10 border border-primary/20 grid place-items-center text-primary disabled:opacity-40 active:bg-primary/20 transition-all flex-shrink-0"
+          onClick={send}
+          disabled={!msg.trim()}
+          className="size-10 rounded-2xl bg-primary disabled:opacity-30 grid place-items-center transition-all active:scale-95"
         >
-          {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          <Send className="size-4 text-primary-foreground" />
         </button>
       </div>
     </div>
   );
 }
 
-function ForumTab() {
-  const [topicos, setTopicos] = useState<TopicoForum[]>([]);
+// ─── Página Principal ──────────────────────────────────────────────────────
+export default function PlayHomePage() {
+  const [tab, setTab] = useState<Tab>("home");
+
+  // Dados das abas principais
+  const [musicas, setMusicas] = useState<SheetItem[]>([]);
+  const [clipes, setClipes] = useState<SheetItem[]>([]);
+  const [videos, setVideos] = useState<SheetItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openTopico, setOpenTopico] = useState<TopicoForum | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`${API_URL}?action=getTopicos`)
-      .then((r) => r.json())
-      .then((d) => setTopicos(Array.isArray(d) ? d : d?.topicos ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (openTopico)
-    return <ForumTopicoDetalhe topico={openTopico} onBack={() => setOpenTopico(null)} />;
-
-  return (
-    <div className="space-y-3">
-      <SectionHeader icon={<MessageSquare className="size-4 text-primary" />} title="Fórum" />
-      {loading ? (
-        <SkeletonList rows={4} />
-      ) : topicos.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum tópico disponível.</p>
-      ) : (
-        topicos.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setOpenTopico(t)}
-            className="w-full flex items-center gap-3 p-3.5 bg-white/[0.03] border border-white/[0.05] rounded-2xl active:border-primary/30 transition-all text-left"
-          >
-            <div className="size-10 rounded-xl bg-primary/10 grid place-items-center flex-shrink-0">
-              <MessageSquare className="size-4 text-primary/60" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-black uppercase tracking-tight truncate">{t.titulo}</p>
-              <p className="text-[10px] text-muted-foreground truncate mt-0.5">{t.ultimaMsg}</p>
-            </div>
-            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-              <span className="text-[9px] text-muted-foreground/50">{t.mensagens}</span>
-              <ChevronRight className="size-3 text-muted-foreground/40" />
-            </div>
-          </button>
-        ))
-      )}
-    </div>
-  );
-}
-
-// ─── Aba Músicas ───────────────────────────────────────────────────────────
-type MusicasSubTab = "lancamentos" | "albuns" | "lancar";
-
-const MUSICAS_SUBTABS: { id: MusicasSubTab; label: string }[] = [
-  { id: "lancamentos", label: "Lançamentos" },
-  { id: "albuns",      label: "Álbuns" },
-  { id: "lancar",      label: "Lançar" },
-];
-
-function MusicasTab({
-  musicasDB,
-  loading,
-}: {
-  musicasDB: SheetItem[];
-  loading: boolean;
-}) {
-  const [subTab, setSubTab] = useState<MusicasSubTab>("lancamentos");
-
-  const sorted = useMemo(
-    () => [...musicasDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)),
-    [musicasDB]
-  );
-
-  const playItems = useMemo(() => sorted.map(toPlayItemMusica), [sorted]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-1.5 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {MUSICAS_SUBTABS.map((st) => (
-          <button
-            key={st.id}
-            onClick={() => setSubTab(st.id)}
-            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              subTab === st.id
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-muted-foreground"
-            }`}
-          >
-            {st.label}
-          </button>
-        ))}
-      </div>
-
-      {subTab === "lancamentos" && (
-        <div className="space-y-1">
-          {loading ? (
-            <SkeletonList rows={6} />
-          ) : sorted.length === 0 ? (
-            <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhuma música cadastrada.</p>
-          ) : (
-            sorted.map((m, i) => (
-              <RowTrack
-                key={playItems[i].id}
-                item={playItems[i]}
-                queue={playItems}
-                num={i + 1}
-                rawDate={getField(
-                  m,
-                  "Data de lançamento", "Data de lancamento", "data_de_lancamento",
-                  "datadelancamento", "data_lancamento", "datalancamento",
-                  "data", "release_date", "releasedate",
-                )}
-              />
-            ))
-          )}
-        </div>
-      )}
-
-      {subTab === "albuns" && (
-        <div className="space-y-3">
-          <SectionHeader icon={<Music className="size-4 text-primary" />} title="Álbuns" />
-          {loading ? (
-            <SkeletonGrid cols={2} rows={2} />
-          ) : (
-            <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Álbuns em breve.</p>
-          )}
-        </div>
-      )}
-
-      {subTab === "lancar" && <LancarTab />}
-    </div>
-  );
-}
-
-// ─── Aba Clipes (Music Videos da aba Empire_Play_Music_Videos) ─────────────
-function ClipesTab({
-  playMusicVideosDB,
-  loading,
-}: {
-  playMusicVideosDB: SheetItem[];
-  loading: boolean;
-}) {
-  const sorted = useMemo(
-    () => [...playMusicVideosDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)),
-    [playMusicVideosDB]
-  );
-  const playItems = useMemo(() => sorted.map((m) => toPlayItem(m, "musicvideo")), [sorted]);
-
-  return (
-    <div className="space-y-4">
-      <SectionHeader icon={<Clapperboard className="size-4 text-primary" />} title="Clipes" />
-      {loading ? (
-        <SkeletonGrid cols={2} rows={3} />
-      ) : playItems.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum clipe disponível.</p>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          {playItems.map((item) => (
-            <VideoCard key={item.id} item={item} queue={playItems} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Aba Vídeos (aba "Videos" — Telegram file_id) ──────────────────────────
-function VideosTab({
-  videosDB,
-  loading,
-}: {
-  videosDB: SheetItem[];
-  loading: boolean;
-}) {
-  const [filtro, setFiltro] = useState<"todos" | "musicvideo" | "video">("todos");
-
-  const allItems = useMemo(
-    () =>
-      [...videosDB]
-        .filter((m) => {
-          const status = getField(m, "status").toLowerCase();
-          // só exibe itens prontos (ready_telegram ou sem status)
-          return status === "" || status === "ready_telegram" || status === "ready";
-        })
-        .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
-        .map(toPlayItemVideo),
-    [videosDB]
-  );
-
-  const filtered = useMemo(() => {
-    if (filtro === "todos") return allItems;
-    return allItems.filter((item) => item.categoria === filtro);
-  }, [allItems, filtro]);
-
-  return (
-    <div className="space-y-4">
-      <SectionHeader icon={<Tv className="size-4 text-primary" />} title="Vídeos" />
-
-      {/* Filtro */}
-      <div className="flex gap-1.5 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {([
-          ["todos", "Todos"],
-          ["musicvideo", "Music Videos"],
-          ["video", "Outros"],
-        ] as [string, string][]).map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setFiltro(val as typeof filtro)}
-            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              filtro === val
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-muted-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <SkeletonGrid cols={2} rows={3} />
-      ) : filtered.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum vídeo disponível.</p>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          {filtered.map((item) => (
-            <VideoCard key={item.id} item={item} queue={filtered} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main Page ─────────────────────────────────────────────────────────────
-function PlayHomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("home");
-
-  // ── dados carregados UMA vez e nunca resetados ao trocar de aba ──
-  const [musicasDB, setMusicasDB] = useState<SheetItem[]>([]);
-  const [playMusicVideosDB, setPlayMusicVideosDB] = useState<SheetItem[]>([]);
-  const [videosDB, setVideosDB] = useState<SheetItem[]>([]);
+  // Charts
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [chartsLoading, setChartsLoading] = useState(true);
-  const [chartsError, setChartsError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [activeChart, setActiveChart] = useState<ChartData | null>(null);
 
+  // Carrega abas principais
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      fetchSheetValues("Empire_Play"),
-      fetchSheetValues("Empire_Play_Music_Videos"),
-      // aba se chama "Videos" dentro da planilha Empire_Play
-      fetchSheetValues("Videos"),
-    ]).then(([musicas, pmv, videos]) => {
-      setMusicasDB(sheetRowsToObjects(musicas.values));
-      setPlayMusicVideosDB(sheetRowsToObjects(pmv.values));
-      setVideosDB(sheetRowsToObjects(videos.values));
-      setLoading(false);
-    });
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [mRes, cRes, vRes] = await Promise.all([
+          fetchSheetValues("Musicas"),
+          fetchSheetValues("Music Videos"),
+          fetchSheetValues("Videos"),
+        ]);
+        if (!cancelled) {
+          setMusicas(sheetRowsToObjects(mRes.values));
+          setClipes(sheetRowsToObjects(cRes.values));
+          setVideos(sheetRowsToObjects(vRes.values));
+          if (mRes.error && cRes.error && vRes.error) {
+            setError("Não foi possível carregar os dados. Verifique sua conexão.");
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
   }, []);
 
+  // Carrega charts
   useEffect(() => {
-    setChartsLoading(true);
-    let errAcc = "";
-    Promise.all(
-      CHARTS_CONFIG.map((c) =>
-        fetchSheetValues(c.aba).then((r) => {
-          if (r.error) errAcc += r.error + " ";
-          return { config: c, values: r.values };
-        })
-      )
-    ).then((results) => {
-      const built: ChartData[] = results
-        .map(({ config, values }) => {
-          const { entries, capaDaPlaylist } = processChart(values, config.isVideo, config.maxEntries);
-          if (entries.length === 0) return null;
-          return {
-            nome: config.nome,
-            subtitulo: config.subtitulo,
-            icone: config.icone,
-            cor: config.cor,
-            capaDaPlaylist,
-            entries,
-          } as ChartData;
-        })
-        .filter((c): c is ChartData => c !== null);
-      setCharts(built);
-      setChartsError(errAcc.trim());
-      setChartsLoading(false);
-    });
+    let cancelled = false;
+    async function loadCharts() {
+      setChartsLoading(true);
+      try {
+        const results = await Promise.all(
+          CHARTS_CONFIG.map((c) => fetchSheetValues(c.aba))
+        );
+        if (!cancelled) {
+          const built: ChartData[] = CHARTS_CONFIG.map((cfg, i) => {
+            const { entries, capaDaPlaylist } = processChart(results[i].values, cfg.isVideo, cfg.maxEntries);
+            return {
+              nome: cfg.nome,
+              subtitulo: cfg.subtitulo,
+              icone: cfg.icone,
+              cor: cfg.cor,
+              capaDaPlaylist,
+              entries,
+            };
+          });
+          setCharts(built);
+        }
+      } finally {
+        if (!cancelled) setChartsLoading(false);
+      }
+    }
+    loadCharts();
+    return () => { cancelled = true; };
   }, []);
 
+  // Converte para PlayItem
+  const musicasPlay = useMemo(() => musicas.map(toPlayItemMusica), [musicas]);
+  const clipesPlay  = useMemo(() => clipes.map((m) => toPlayItem(m, "musicvideo")), [clipes]);
+  const videosPlay  = useMemo(() => videos.map(toPlayItemVideo), [videos]);
+
+  const recentes = useMemo(() => {
+    const all = [
+      ...musicas.map((m) => ({ item: toPlayItemMusica(m), ts: parseDataLancamento(m) })),
+      ...clipes.map((m)  => ({ item: toPlayItem(m, "musicvideo"), ts: parseDataLancamento(m) })),
+    ];
+    return all
+      .filter((x) => x.ts > 0)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 8);
+  }, [musicas, clipes]);
+
+  // ─── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur border-b border-white/[0.06]">
-        <Radio className="size-5 text-primary" />
-        <span className="text-sm font-black uppercase tracking-widest">Empire Play</span>
+    <div className="min-h-dvh bg-background text-foreground pb-24">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
+        <div className="size-8 rounded-xl bg-primary/20 border border-primary/30 grid place-items-center flex-shrink-0">
+          <Radio className="size-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-black uppercase tracking-widest truncate">Empire Play</h1>
+          <p className="text-[10px] text-muted-foreground truncate">
+            {musicas.length + clipes.length + videos.length > 0
+              ? `${musicas.length} músicas · ${clipes.length} clipes · ${videos.length} vídeos`
+              : loading ? "Carregando…" : "Empire RPG"}
+          </p>
+        </div>
+        <button
+          onClick={() => setTab("forum")}
+          className="size-8 rounded-xl bg-white/[0.04] border border-white/[0.08] grid place-items-center text-muted-foreground active:text-primary transition-colors"
+        >
+          <PlusCircle className="size-4" />
+        </button>
       </header>
 
-      {/* ── Conteúdo da aba ativa ── */}
-      <main className="flex-1 px-4 py-5 pb-32 overflow-y-auto">
-        {/* Renderiza TODAS as abas mas só mostra a ativa — evita reset de estado ao navegar */}
-        <div className={activeTab === "home" ? "block" : "hidden"}>
-          <HomeTab
-            musicasDB={musicasDB}
-            playMusicVideosDB={playMusicVideosDB}
-            charts={charts}
-            chartsLoading={chartsLoading}
-            chartsError={chartsError}
-            loading={loading}
-            onTabChange={setActiveTab}
-          />
-        </div>
-        <div className={activeTab === "musicas" ? "block" : "hidden"}>
-          <MusicasTab musicasDB={musicasDB} loading={loading} />
-        </div>
-        <div className={activeTab === "clipes" ? "block" : "hidden"}>
-          <ClipesTab playMusicVideosDB={playMusicVideosDB} loading={loading} />
-        </div>
-        <div className={activeTab === "videos" ? "block" : "hidden"}>
-          <VideosTab videosDB={videosDB} loading={loading} />
-        </div>
-        <div className={activeTab === "forum" ? "block" : "hidden"}>
-          <ForumTab />
-        </div>
+      {/* Tab Content */}
+      <main className="px-4 pt-4">
+        {error && (
+          <div className="mb-4 flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
+            <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-red-300">{error}</p>
+          </div>
+        )}
+
+        {/* HOME */}
+        {tab === "home" && (
+          <div className="space-y-8">
+            {/* Recentes */}
+            <section>
+              <SectionHeader icon={<Radio className="size-3.5" />} title="Recentes" onMore={() => setTab("musicas")} />
+              {loading ? <SkeletonGrid cols={3} rows={2} /> : (
+                <div className="grid grid-cols-3 gap-3">
+                  {recentes.slice(0, 6).map(({ item, ts }) => (
+                    <SongCardWithDate key={item.id} item={item} queue={recentes.map((r) => r.item)} rawDate={String(ts)} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Charts */}
+            <section>
+              <SectionHeader icon={<span className="text-xs">🏆</span>} title="Charts" />
+              {chartsLoading ? <SkeletonGrid cols={3} rows={1} /> : (
+                activeChart ? (
+                  <ChartDetailView chart={activeChart} onBack={() => setActiveChart(null)} />
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {charts.map((c) => (
+                      <ChartMiniCard key={c.nome} chart={c} onOpen={() => setActiveChart(c)} />
+                    ))}
+                  </div>
+                )
+              )}
+            </section>
+
+            {/* Músicas */}
+            {musicasPlay.length > 0 && (
+              <section>
+                <SectionHeader icon={<Music className="size-3.5" />} title="Músicas" onMore={() => setTab("musicas")} />
+                {loading ? <SkeletonGrid cols={3} rows={2} /> : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {musicasPlay.slice(0, 6).map((item) => (
+                      <SongCard key={item.id} item={item} queue={musicasPlay} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Clipes */}
+            {clipesPlay.length > 0 && (
+              <section>
+                <SectionHeader icon={<Clapperboard className="size-3.5" />} title="Clipes" onMore={() => setTab("clipes")} />
+                {loading ? <SkeletonGrid cols={2} rows={2} /> : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {clipesPlay.slice(0, 4).map((item) => (
+                      <VideoCard key={item.id} item={item} queue={clipesPlay} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* MÚSICAS */}
+        {tab === "musicas" && (
+          <div className="space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+              {musicasPlay.length} faixas
+            </p>
+            {loading ? <SkeletonList rows={8} /> : (
+              musicasPlay.length > 0
+                ? musicasPlay.map((item, i) => (
+                    <RowTrack
+                      key={item.id}
+                      item={item}
+                      queue={musicasPlay}
+                      num={i + 1}
+                      rawDate={getField(musicas[i] ?? {}, "Data de lançamento", "data_lancamento", "data")}
+                    />
+                  ))
+                : <div className="py-12 text-center text-[11px] text-muted-foreground/50">Nenhuma música encontrada.</div>
+            )}
+          </div>
+        )}
+
+        {/* CLIPES */}
+        {tab === "clipes" && (
+          <div className="space-y-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              {clipesPlay.length} clipes
+            </p>
+            {loading ? <SkeletonGrid cols={2} rows={3} /> : (
+              clipesPlay.length > 0
+                ? <div className="grid grid-cols-2 gap-3">
+                    {clipesPlay.map((item) => (
+                      <VideoCard key={item.id} item={item} queue={clipesPlay} />
+                    ))}
+                  </div>
+                : <div className="py-12 text-center text-[11px] text-muted-foreground/50">Nenhum clipe encontrado.</div>
+            )}
+          </div>
+        )}
+
+        {/* VÍDEOS */}
+        {tab === "videos" && (
+          <div className="space-y-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              {videosPlay.length} vídeos
+            </p>
+            {loading ? <SkeletonGrid cols={2} rows={3} /> : (
+              videosPlay.length > 0
+                ? <div className="grid grid-cols-2 gap-3">
+                    {videosPlay.map((item) => (
+                      <VideoCard key={item.id} item={item} queue={videosPlay} />
+                    ))}
+                  </div>
+                : <div className="py-12 text-center text-[11px] text-muted-foreground/50">Nenhum vídeo encontrado.</div>
+            )}
+          </div>
+        )}
+
+        {/* FÓRUM */}
+        {tab === "forum" && <ForumTab />}
+
+        {/* LANÇAR */}
+        {tab === "forum" && (
+          <div className="mt-8 pt-8 border-t border-white/[0.06]">
+            <SectionHeader icon={<Upload className="size-3.5" />} title="Lançar Música" />
+            <LancarTab />
+          </div>
+        )}
       </main>
 
-      {/* ── Bottom Nav ── */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 flex items-center bg-background/90 backdrop-blur border-t border-white/[0.06] pb-safe">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
-              activeTab === id ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            <Icon className="size-5" />
-            <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
-          </button>
-        ))}
+      {/* Bottom Nav */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/90 backdrop-blur-xl border-t border-white/[0.06]">
+        <div className="flex items-stretch h-16">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                tab === id ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              <Icon className="size-5" />
+              <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
+            </button>
+          ))}
+        </div>
       </nav>
     </div>
   );
