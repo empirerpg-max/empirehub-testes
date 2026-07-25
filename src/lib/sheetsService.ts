@@ -14,7 +14,7 @@ const GAS_URL = import.meta.env.VITE_GAS_URL as string | undefined
 
 const BASE = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}`
 
-// Nomes reais das abas na planilha (confirmados no EmpirePlay.gs)
+// Nomes reais das abas na planilha
 export const SHEET_NAMES = {
   musicas:     'Musicas',
   musicVideos: 'Music Videos',
@@ -33,7 +33,6 @@ export type SheetRow = Record<string, string>
 /**
  * Busca uma aba inteira da planilha.
  * Primeira linha = cabeçalhos. Retorna array de objetos.
- * Se API_KEY não estiver configurada, retorna array vazio (sem crash).
  */
 export async function fetchSheet(sheetName: string): Promise<SheetRow[]> {
   if (!API_KEY) {
@@ -65,13 +64,18 @@ export async function fetchSheet(sheetName: string): Promise<SheetRow[]> {
   }
 }
 
-// ── Atalhos para cada aba de conteúdo ───────────────────────────────────────
+// ── Atalhos para cada aba de conteúdo ──────────────────────────────────────
 export const fetchMusicas     = () => fetchSheet(SHEET_NAMES.musicas)
 export const fetchMusicVideos = () => fetchSheet(SHEET_NAMES.musicVideos)
 export const fetchVideos      = () => fetchSheet(SHEET_NAMES.videos)
 export const fetchAlbuns      = () => fetchSheet(SHEET_NAMES.albuns)
 
-// ── Tipos de Chart (espelham o ChartData do PlayHomePage) ───────────────────
+// ── Tipos de Chart ──────────────────────────────────────────────────────────
+/**
+ * Uma entrada de posição no chart.
+ * Nota: `playItem` é adicionado APENAS no PlayHomePage.tsx ao cruzar com
+ * os dados da planilha de músicas. NÃO pertence a este tipo base.
+ */
 export interface ChartEntry {
   posicao: number
   titulo: string
@@ -88,13 +92,7 @@ export interface ChartData {
 }
 
 /**
- * Lê as três abas de charts (Top_50_Spotify, Top_Songs_Apple_Music,
- * Top_Videos_YT) e as converte em ChartData[].
- *
- * Colunas esperadas em cada aba (case-insensitive após trim):
- *   posicao | titulo | artista | capa | plataforma | icone | cor
- *
- * Se a aba não existir ou a chave não estiver configurada, retorna [].
+ * Lê as três abas de charts e as converte em ChartData[].
  */
 export async function fetchCharts(): Promise<ChartData[]> {
   const abas = [
@@ -125,7 +123,6 @@ export async function fetchCharts(): Promise<ChartData[]> {
     abas.map(async (aba) => {
       const rows = await fetchSheet(aba.sheet)
       const entries: ChartEntry[] = rows.map((row, idx) => {
-        // aceita tanto 'posicao' quanto 'Posição' / 'Posicao'
         const posRaw = row['posicao'] ?? row['Posição'] ?? row['Posicao'] ?? String(idx + 1)
         const posicao = parseInt(posRaw, 10) || idx + 1
         const titulo  = row['titulo']  ?? row['Título']  ?? row['title'] ?? ''
@@ -133,7 +130,6 @@ export async function fetchCharts(): Promise<ChartData[]> {
         return { posicao, titulo, capa }
       })
 
-      // Capas da playlist: usa a capa da primeira entrada como fallback
       const capaDaPlaylist = entries[0]?.capa ?? ''
 
       return {
@@ -165,7 +161,6 @@ export const fetchComentarios = (categoria: 'musicas' | 'musicVideos' | 'videos'
 
 /**
  * Envia um comentário via Apps Script Web App.
- * Requer VITE_GAS_URL.
  */
 export async function postComentario(payload: {
   action: 'novoComentario'
