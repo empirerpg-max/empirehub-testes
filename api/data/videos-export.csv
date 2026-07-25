@@ -1,3 +1,6 @@
 ﻿id_video,telegram_msg_id,tipo,titulo_topico,artista,titulo_video,id_usuario,nome_usuario,data_criacao,video_url,file_source,file_name,duracao_segundos,largura,altura,file_size_bytes
-28,107,video,"#MusicVideo | SA5M - hard core feat. raven, helenna & ted",SA5M,"hard core feat. raven, helenna & ted",5031494795,Gilson Tavares,No dia 10/03/2024 às 01:28:45,[arquivo no telegram – msg 107],telegram,,,,,
-30,113,video,#Video | SA5M - bookers list short film,SA5M,bookers list short film,5031494795,Gilson Tavares,No dia 10/03/2024 às 01:31:21,[arquivo no telegram – msg 113],telegram,,,,,
+28,107,video,"#MusicVideo | SA5M - hard core feat. raven, helenna & ted",SA5M,"hard core feat. raven, helenna & ted",5031494795,Gilson Tavares,No dia 10/03/2024 às 01:28:45,telegram://msg/107,telegram,,,,,
+30,113,video,#Video | SA5M - bookers list short film,SA5M,bookers list short film,5031494795,Gilson Tavares,No dia 10/03/2024 às 01:31:21,telegram://msg/113,telegram,,,,,
+33,120,musicvideo,#MusicVideo | SA5M - new face (prequel),SA5M,new face (prequel),5031494795,Gilson Tavares,No dia 10/03/2024 às 01:57:57,telegram://msg/120,telegram,,,,,
+41,41,musicvideo,#MusicVideo | ❭Unusual❮ by Hayley Wonderwall,,❭Unusual❮ by Hayley Wonderwall,6162211253,jamie lynn,No dia 03/04/2024 às 11:30:37,,,,,,,
+49,168,musicvideo,#MusicVideo | SA5M - supermodel,SA5M,supermodel,5031494795,Gilson Tavares,No dia 09/04/2024 às 22:31:55,telegram://msg/168,telegram,,,,,
