@@ -8,6 +8,16 @@ import {
 } from 'react'
 import { telegramStreamUrl, isTelegramSrc } from './telegramStorage'
 
+// Declara o namespace YT globalmente para evitar erro de TSC
+// (a IFrame API real é carregada via <script> no MiniPlayer)
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    YT: any
+    onYouTubeIframeAPIReady: () => void
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type MediaType = 'drive' | 'youtube' | 'telegram'
@@ -17,19 +27,7 @@ export type PlayItem = {
   titulo: string
   artista: string
   capa: string
-  /**
-   * Drive file-id | YouTube video-id (11 chars) | URL completa
-   * Para Telegram: prefixar com "tg:" + file_id
-   * Ex: audioSrc = "tg:BQACAgIAAxk..."
-   */
   audioSrc: string
-  /**
-   * URL de vídeo opcional.
-   * Aceita: https://api.telegram.org/file/bot<TOKEN>/<path> (mp4 nativo)
-   *       | https://youtu.be/... | https://youtube.com/watch?v=...
-   *       | https://drive.google.com/file/d/<id>/view
-   * Quando presente, o MiniPlayer exibe o botão 🎬 para abrir o VideoPopup.
-   */
   videoSrc?: string
   letra?: string
   categoria: 'musica' | 'musicvideo' | 'video'
@@ -51,8 +49,10 @@ type PlayContextType = {
   close: () => void
   mediaType: MediaType | null
   currentMediaId: string | null
-  audioRef: React.RefObject<HTMLAudioElement | null>
-  ytPlayerRef: React.MutableRefObject<YT.Player | null>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  audioRef: React.RefObject<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ytPlayerRef: React.MutableRefObject<any>
   confirmPlaying: () => void
   confirmPaused: () => void
   onEnded: () => void
@@ -62,7 +62,7 @@ type PlayContextType = {
   syncPlaying: (v: boolean) => void
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 export function extractDriveId(str: string): string | null {
   if (!str) return null
@@ -89,7 +89,6 @@ export function extractYouTubeId(str: string): string | null {
   return null
 }
 
-/** Extrai o file_id de um audioSrc com prefixo "tg:" */
 export function extractTelegramFileId(str: string): string | null {
   if (!str) return null
   if (str.startsWith('tg:')) return str.slice(3)
@@ -106,11 +105,6 @@ export function detectMediaType(audioSrc: string): MediaType {
   return 'drive'
 }
 
-/**
- * Detecta o tipo de um videoSrc para o VideoPopup do MiniPlayer.
- * Retorna 'native' para mp4/webm do Telegram ou URLs diretas de vídeo,
- * 'youtube' para links do YouTube, 'drive' para Google Drive.
- */
 export type VideoSrcType = 'native' | 'youtube' | 'drive'
 
 export function detectVideoSrcType(videoSrc: string): VideoSrcType {
@@ -127,12 +121,6 @@ export function detectVideoSrcType(videoSrc: string): VideoSrcType {
   return 'native'
 }
 
-/**
- * Converte um videoSrc de qualquer tipo em uma URL embedável.
- * - YouTube  → https://www.youtube-nocookie.com/embed/<id>?autoplay=1
- * - Drive    → https://drive.google.com/file/d/<id>/preview
- * - Native   → retorna a URL sem modificação
- */
 export function resolveVideoEmbedUrl(videoSrc: string): string {
   const type = detectVideoSrcType(videoSrc)
   if (type === 'youtube') {
@@ -155,10 +143,6 @@ export function driveStreamUrl(idOrUrl: string): string {
   return `https://empire-media-api.empirerpg-forum.workers.dev/?id=${id}`
 }
 
-/**
- * Resolve a URL de stream para qualquer tipo de mídia de áudio.
- * Use no MiniPlayer em vez de chamar cada helper diretamente.
- */
 export function resolveStreamUrl(audioSrc: string): string {
   const type = detectMediaType(audioSrc)
   if (type === 'telegram') return telegramStreamUrl(audioSrc)
@@ -182,7 +166,8 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     playing: false,
   })
 
-  const audioRef    = useRef<HTMLAudioElement | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const audioRef    = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ytPlayerRef = useRef<any>(null)
 

@@ -1,7 +1,5 @@
 // ============================================================
 // UploadForm — Wizard 3 steps para upload de mídia
-// Fluxo: Tipo → Metadados → Arquivo/Link → Submit → GAS
-// Compatível com as rotas do GAS: gravarMusica, gravarVideo, gravarAlbum
 // ============================================================
 import { useState, useRef } from 'react';
 import type { MediaType } from '../../types';
@@ -16,7 +14,6 @@ export type UploadStep = 'tipo' | 'metadados' | 'arquivo' | 'sucesso';
 
 export interface UploadPayload {
   tipo: MediaType;
-  // Música
   titulo?: string;
   artistas?: string[];
   genero?: string;
@@ -28,15 +25,12 @@ export interface UploadPayload {
   capaUrl?: string;
   substituir?: string;
   musicaSubstituida?: string;
-  // Álbum
   nomeAlbum?: string;
   criador?: string;
-  // Clipe / Vídeo
   nome?: string;
   nomeCriador?: string;
   tipoVideo?: string;
   thumbnail?: string;
-  // Fonte
   source?: 'youtube' | 'drive' | 'telegram';
   audioUrl?: string;
   videoUrl?: string;
@@ -72,27 +66,20 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
     try {
       const finalPayload: Partial<UploadPayload> = { ...payload, ...arquivoData };
 
-      // Se for upload direto → Telegram primeiro
       if (arquivoData.source === 'telegram' && file) {
         const tgResult = await uploadToTelegram(file, finalPayload.tipo as MediaType);
         finalPayload.telegramFileId = tgResult.file_id;
-        // URL temporária para preview imediato
         finalPayload.audioUrl = tgResult.file_url;
         finalPayload.videoUrl = tgResult.file_url;
       }
 
-      // Determina a action do GAS com base no tipo
-      let action: string;
-      switch (finalPayload.tipo) {
-        case 'album':  action = 'gravarAlbum';  break;
-        case 'video':  action = 'gravarVideo';  break;
-        case 'clip':   action = 'gravarVideo';  break;
-        default:       action = 'gravarMusica'; break;
-      }
+      // action como literal type exato esperado pelo submitToGAS
+      const action: 'gravarMusica' | 'gravarAlbum' | 'gravarVideo' =
+        finalPayload.tipo === 'album' ? 'gravarAlbum'
+        : (finalPayload.tipo === 'video' || finalPayload.tipo === 'clip') ? 'gravarVideo'
+        : 'gravarMusica';
 
-      // Monta o body no formato esperado pelo GAS (compatível com registros1.txt + registros2-2.txt)
       const gasBody = buildGASBody(finalPayload, userId, userName);
-
       const result = await submitToGAS(action, gasBody);
       setResultThreadId(result?.threadId || gasBody.threadId || null);
       goTo('sucesso');
@@ -119,7 +106,6 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
         overflow: 'hidden',
       }}
     >
-      {/* Header */}
       {step !== 'sucesso' && (
         <div className="flex items-center justify-between px-5 pt-5 pb-4"
           style={{ borderBottom: '1px solid var(--border)' }}>
@@ -150,7 +136,6 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
         </div>
       )}
 
-      {/* Progress bar (steps 2 e 3) */}
       {stepIndex > 0 && step !== 'sucesso' && (
         <div className="px-5 pt-3">
           <div className="flex gap-1.5">
@@ -165,7 +150,6 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
         </div>
       )}
 
-      {/* Content */}
       <div ref={formRef} className="flex-1 overflow-y-auto px-5 py-4">
         {error && (
           <div className="mb-4 px-3 py-2.5 rounded-lg text-sm"
@@ -174,11 +158,7 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
           </div>
         )}
 
-        {step === 'tipo' && (
-          <StepTipo
-            onSelect={(tipo) => goTo('metadados', { tipo })}
-          />
-        )}
+        {step === 'tipo' && <StepTipo onSelect={(tipo) => goTo('metadados', { tipo })} />}
 
         {step === 'metadados' && (
           <StepMetadados
@@ -212,7 +192,6 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
   );
 }
 
-// ── Monta o payload no formato do GAS ──────────────────────────────────────
 function buildGASBody(p: Partial<UploadPayload>, userId: string, userName: string) {
   const base = {
     threadId: p.threadId || String(Date.now()),
@@ -221,48 +200,10 @@ function buildGASBody(p: Partial<UploadPayload>, userId: string, userName: strin
   };
 
   if (p.tipo === 'music') {
-    return {
-      ...base,
-      titulo: p.titulo || '',
-      artistas: p.artistas || [],
-      tipoSingle: p.tipoSingle || '',
-      tipoMusica: p.tipoMusica || 'SOLO',
-      genero: p.genero || '',
-      albumVinculado: p.albumVinculado || '',
-      dataLancamento: p.dataLancamento || '',
-      letra: p.letra || '',
-      capaUrl: p.capaUrl || '',
-      substituir: p.substituir || 'Não',
-      musicaSubstituida: p.musicaSubstituida || '',
-      source: p.source || 'drive',
-      audioUrl: p.audioUrl || '',
-      telegramFileId: p.telegramFileId || '',
-    };
+    return { ...base, titulo: p.titulo || '', artistas: p.artistas || [], tipoSingle: p.tipoSingle || '', tipoMusica: p.tipoMusica || 'SOLO', genero: p.genero || '', albumVinculado: p.albumVinculado || '', dataLancamento: p.dataLancamento || '', letra: p.letra || '', capaUrl: p.capaUrl || '', substituir: p.substituir || 'Não', musicaSubstituida: p.musicaSubstituida || '', source: p.source || 'drive', audioUrl: p.audioUrl || '', telegramFileId: p.telegramFileId || '' };
   }
-
   if (p.tipo === 'album') {
-    return {
-      ...base,
-      titulo: p.nomeAlbum || '',
-      criador: p.criador || userName,
-      dataLancamento: p.dataLancamento || '',
-      capaUrl: p.capaUrl || '',
-      source: p.source || 'drive',
-      videoUrl: p.videoUrl || '',
-      telegramFileId: p.telegramFileId || '',
-    };
+    return { ...base, titulo: p.nomeAlbum || '', criador: p.criador || userName, dataLancamento: p.dataLancamento || '', capaUrl: p.capaUrl || '', source: p.source || 'drive', videoUrl: p.videoUrl || '', telegramFileId: p.telegramFileId || '' };
   }
-
-  // clip ou video
-  return {
-    ...base,
-    titulo: p.nome || p.titulo || '',
-    nomeCriador: p.nomeCriador || userName,
-    tipoVideo: p.tipoVideo || 'Oficial',
-    thumbnail: p.thumbnail || '',
-    dataLancamento: p.dataLancamento || '',
-    source: p.source || 'youtube',
-    videoUrl: p.videoUrl || '',
-    telegramFileId: p.telegramFileId || '',
-  };
+  return { ...base, titulo: p.nome || p.titulo || '', nomeCriador: p.nomeCriador || userName, tipoVideo: p.tipoVideo || 'Oficial', thumbnail: p.thumbnail || '', dataLancamento: p.dataLancamento || '', source: p.source || 'youtube', videoUrl: p.videoUrl || '', telegramFileId: p.telegramFileId || '' };
 }

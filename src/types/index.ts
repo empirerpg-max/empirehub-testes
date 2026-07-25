@@ -4,24 +4,17 @@
 
 /**
  * ContentType — tipo de conteúdo para upload/GAS/Telegram.
- * Não confundir com MediaType de playContext.tsx,
- * que descreve a ORIGEM do stream (drive | youtube | telegram).
  */
 export type ContentType = 'music' | 'album' | 'clip' | 'video'
 
-/**
- * @deprecated Use ContentType.
- * Mantido por retrocompatibilidade com imports antigos.
- * Será removido na Fase 2 da refatoração.
- */
+/** @deprecated Use ContentType. */
 export type MediaType = ContentType
 
-// Mapeia ContentType → categoria do GAS (registros2-2.txt)
 export const GAS_CATEGORIA: Record<ContentType, string> = {
-  music: 'musicas',
-  album: 'musicas',   // álbuns usam a mesma sheet por ora
-  clip:  'musicvideos',
-  video: 'videos',
+  music:  'musicas',
+  album:  'musicas',
+  clip:   'musicvideos',
+  video:  'videos',
 }
 
 export interface GASConteudoItem {
@@ -48,6 +41,26 @@ export interface GASConteudoItem {
   [key: string]: unknown
 }
 
+/**
+ * MusicItem — alias de GASConteudoItem para o player de áudio.
+ * Campos extras usados pelo useAudioPlayer e MiniPlayer.
+ */
+export interface MusicItem extends GASConteudoItem {
+  id: string
+  audioUrl: string
+  source: 'youtube' | 'drive' | 'telegram'
+  telegramFileId?: string
+}
+
+/**
+ * VideoItem — alias de GASConteudoItem para o player de vídeo.
+ */
+export interface VideoItem extends GASConteudoItem {
+  id: string
+  videoUrl: string
+  source: 'youtube' | 'drive' | 'telegram'
+}
+
 export interface GASComentario {
   id_do_topico: string
   id_jogador?: string
@@ -66,7 +79,7 @@ export interface TelegramUploadResult {
 
 export interface YoutubeParseResult {
   videoId: string
-  embedUrl: string          // youtube-nocookie embed
-  thumbnailUrl: string      // maxresdefault
+  embedUrl: string
+  thumbnailUrl: string
   watchUrl: string
 }
