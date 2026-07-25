@@ -38,13 +38,21 @@ export interface UploadPayload {
   threadId?: string;
 }
 
-interface UploadFormProps {
+export interface UploadFormProps {
   onClose?: () => void;
   userId?: string;
   userName?: string;
+  /**
+   * Chamado após submit bem-sucedido.
+   * @param threadId  ID do tópico gerado (string)
+   * @param fileUrl   URL do arquivo (audio/video) resultante
+   * @param titulo    Título informado pelo usuário
+   * @param capa      URL da capa informada pelo usuário
+   */
+  onSuccess?: (threadId: string, fileUrl: string, titulo: string, capa: string) => void;
 }
 
-export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: UploadFormProps) {
+export function UploadForm({ onClose, userId = '', userName = 'Jogador', onSuccess }: UploadFormProps) {
   const [step, setStep] = useState<UploadStep>('tipo');
   const [payload, setPayload] = useState<Partial<UploadPayload>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +89,17 @@ export function UploadForm({ onClose, userId = '', userName = 'Jogador' }: Uploa
 
       const gasBody = buildGASBody(finalPayload, userId, userName);
       const result = await submitToGAS(action, gasBody);
-      setResultThreadId(result?.threadId || gasBody.threadId || null);
+      const resolvedThreadId = result?.threadId || gasBody.threadId || String(Date.now());
+      setResultThreadId(resolvedThreadId);
+
+      // Notifica o componente pai com os dados completos do upload
+      if (onSuccess) {
+        const fileUrl = finalPayload.audioUrl || finalPayload.videoUrl || '';
+        const titulo  = finalPayload.titulo || finalPayload.nomeAlbum || finalPayload.nome || '';
+        const capa    = finalPayload.capaUrl || finalPayload.thumbnail || '';
+        onSuccess(resolvedThreadId, fileUrl, titulo, capa);
+      }
+
       goTo('sucesso');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao enviar. Tente novamente.');

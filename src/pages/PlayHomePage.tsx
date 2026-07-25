@@ -771,32 +771,26 @@ function ForumSection({
   const [subTab, setSubTab]           = useState<ForumSubTab>('topicos')
   const [selectedTopico, setSelected] = useState<ForumTopico | null>(null)
 
-  // Ao criar novo tópico: adiciona à lista e abre o chat diretamente
   function handleNovoTopico(t: ForumTopico) {
     onNovoTopico(t)
     setSelected(t)
     setSubTab('chat')
   }
 
-  // Ao selecionar um tópico da lista: abre o chat
   function handleSelect(t: ForumTopico) {
     setSelected(t)
     setSubTab('chat')
   }
 
-  // ── View: Chat ──
   if (subTab === 'chat' && selectedTopico) {
     return (
       <div className="flex flex-col gap-3">
-        {/* Botão voltar */}
         <button
           onClick={() => { setSubTab('topicos'); setSelected(null) }}
           className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors"
         >
           <ArrowLeft className="size-3.5" /> Voltar aos tópicos
         </button>
-
-        {/* ForumChat real com polling, emojis e aba de letra */}
         <ForumChat
           topicId={selectedTopico.id}
           categoria={selectedTopico.categoria}
@@ -808,7 +802,6 @@ function ForumSection({
     )
   }
 
-  // ── View: Lançar (UploadForm) ──
   if (subTab === 'lancar') {
     return (
       <div className="flex flex-col gap-3">
@@ -818,15 +811,13 @@ function ForumSection({
         >
           <ArrowLeft className="size-3.5" /> Voltar
         </button>
-
         <UploadForm
-          onSuccess={(threadId, fileUrl) => {
-            // Cria o tópico localmente com os dados do upload
+          onSuccess={(threadId: string, fileUrl: string, titulo: string, capa: string) => {
             const novoItem: PlayItem = {
               id: threadId,
-              titulo: threadId,
+              titulo: titulo || threadId,
               artista: '',
-              capa: '',
+              capa: capa || '',
               audioSrc: fileUrl,
               categoria: 'musica',
             }
@@ -842,10 +833,8 @@ function ForumSection({
     )
   }
 
-  // ── View: Lista de tópicos ──
   return (
     <div className="space-y-4">
-      {/* Subtabs: Tópicos | Lançar */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
         {(['topicos', 'lancar'] as const).map((s) => (
           <button
@@ -859,7 +848,6 @@ function ForumSection({
           </button>
         ))}
       </div>
-
       <ForumTopicosList topicos={topicos} onSelect={handleSelect} />
     </div>
   )
