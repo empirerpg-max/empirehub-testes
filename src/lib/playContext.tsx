@@ -49,8 +49,9 @@ type PlayContextType = {
   close: () => void
   mediaType: MediaType | null
   currentMediaId: string | null
+  // MutableRefObject permite atribuição direta: audioRef.current = new Audio()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  audioRef: React.RefObject<any>
+  audioRef: React.MutableRefObject<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ytPlayerRef: React.MutableRefObject<any>
   confirmPlaying: () => void
@@ -166,6 +167,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     playing: false,
   })
 
+  // useRef<any>(null) retorna MutableRefObject<any> — permite audioRef.current = audio
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const audioRef    = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
