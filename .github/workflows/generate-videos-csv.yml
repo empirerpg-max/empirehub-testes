@@ -1,0 +1,32 @@
+name: Generate Videos CSV
+
+on:
+  push:
+    paths:
+      - 'api/data/videos-data.json'
+  workflow_dispatch:
+
+jobs:
+  generate-csv:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate CSV from videos-data.json
+        run: node api/scripts/generate-videos-csv.js
+
+      - name: Commit generated CSV
+        run: |
+          git config user.name "Empire Bot"
+          git config user.email "bot@empiregame.app"
+          git add api/data/videos-export.csv
+          git diff --staged --quiet || git commit -m "chore: regenerar videos-export.csv [skip ci]"
+          git push

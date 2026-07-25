@@ -1,0 +1,43 @@
+name: Telegram Video Forwarder
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run? (true = só loga, false = encaminha de verdade)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  forward-videos:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Telegram Forwarder
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SOURCE_CHAT_ID: ${{ secrets.SOURCE_CHAT_ID }}
+          DEST_CHAT_ID: ${{ secrets.DEST_CHAT_ID }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node api/scripts/telegram-forwarder.js
+
+      - name: Commit forward log
+        run: |
+          git config user.name "Empire Bot"
+          git config user.email "bot@empiregame.app"
+          git add api/data/forward-log.json
+          git diff --staged --quiet || git commit -m "chore: atualizar forward-log.json [skip ci]"
+          git push

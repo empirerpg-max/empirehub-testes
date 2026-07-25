@@ -1,0 +1,42 @@
+[
+  {
+    "id_video": 28,
+    "telegram_msg_id": 107,
+    "tipo": "video",
+    "titulo_topico": "#MusicVideo | SA5M - hard core feat. raven, helenna & ted",
+    "artista": "SA5M",
+    "titulo_video": "hard core feat. raven, helenna & ted",
+    "id_usuario": ["5","0","3","1","4","9","4","7","9","5"],
+    "nome_usuario": "Gilson Tavares",
+    "data_raw": "2024-03-10T01:28:45",
+    "video_url": "[arquivo no telegram – msg 107]",
+    "file_source": "telegram",
+    "file_name": "",
+    "duracao_segundos": "",
+    "largura": "",
+    "altura": "",
+    "file_size_bytes": ""
+  },
+  {
+    "id_video": 30,
+    "telegram_msg_id": 113,
+    "tipo": "video",
+    "titulo_topico": "#Video | SA5M - bookers list short film",
+    "artista": "SA5M",
+    "titulo_video": "bookers list short film",
+    "id_usuario": ["5","0","3","1","4","9","4","7","9","5"],
+    "nome_usuario": "Gilson Tavares",
+    "data_raw": "2024-03-10T01:31:21",
+    "video_url": "[arquivo no telegram – msg 113]",
+    "file_source": "telegram",
+    "file_name": "",
+    "duracao_segundos": "",
+    "largura": "",
+    "altura": "",
+    "file_size_bytes": ""
+  },
+  {
+    "note": "arquivo completo gerado pelo workflow generate-videos-csv no primeiro run",
+    "total": 200
+  }
+]
