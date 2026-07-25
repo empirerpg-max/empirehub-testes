@@ -23,6 +23,9 @@ export const SHEET_NAMES = {
   comentariosMusicas:     'Comentarios_Musicas',
   comentariosMusicVideos: 'Comentarios_MV',
   comentariosVideos:      'Comentarios_Videos',
+  top50Spotify:      'Top_50_Spotify',
+  topAppleMusic:     'Top_Songs_Apple_Music',
+  topVideosYT:       'Top_Videos_YT',
 } as const
 
 export type SheetRow = Record<string, string>
@@ -62,11 +65,92 @@ export async function fetchSheet(sheetName: string): Promise<SheetRow[]> {
   }
 }
 
-// Atalhos para cada aba
+// ── Atalhos para cada aba de conteúdo ───────────────────────────────────────
 export const fetchMusicas     = () => fetchSheet(SHEET_NAMES.musicas)
 export const fetchMusicVideos = () => fetchSheet(SHEET_NAMES.musicVideos)
 export const fetchVideos      = () => fetchSheet(SHEET_NAMES.videos)
 export const fetchAlbuns      = () => fetchSheet(SHEET_NAMES.albuns)
+
+// ── Tipos de Chart (espelham o ChartData do PlayHomePage) ───────────────────
+export interface ChartEntry {
+  posicao: number
+  titulo: string
+  capa: string
+}
+
+export interface ChartData {
+  nome: string
+  subtitulo: string
+  icone: string
+  cor: string
+  capaDaPlaylist: string
+  entries: ChartEntry[]
+}
+
+/**
+ * Lê as três abas de charts (Top_50_Spotify, Top_Songs_Apple_Music,
+ * Top_Videos_YT) e as converte em ChartData[].
+ *
+ * Colunas esperadas em cada aba (case-insensitive após trim):
+ *   posicao | titulo | artista | capa | plataforma | icone | cor
+ *
+ * Se a aba não existir ou a chave não estiver configurada, retorna [].
+ */
+export async function fetchCharts(): Promise<ChartData[]> {
+  const abas = [
+    {
+      sheet:     SHEET_NAMES.top50Spotify,
+      nome:      'Top 50 Spotify',
+      subtitulo: 'Top 50 — Spotify',
+      icone:     '🎵',
+      cor:       '#1DB954',
+    },
+    {
+      sheet:     SHEET_NAMES.topAppleMusic,
+      nome:      'Top Apple Music',
+      subtitulo: 'Top Songs — Apple Music',
+      icone:     '🍎',
+      cor:       '#FC3C44',
+    },
+    {
+      sheet:     SHEET_NAMES.topVideosYT,
+      nome:      'Top Vídeos YT',
+      subtitulo: 'Top Videos — YouTube',
+      icone:     '▶️',
+      cor:       '#FF0000',
+    },
+  ]
+
+  const results = await Promise.allSettled(
+    abas.map(async (aba) => {
+      const rows = await fetchSheet(aba.sheet)
+      const entries: ChartEntry[] = rows.map((row, idx) => {
+        // aceita tanto 'posicao' quanto 'Posição' / 'Posicao'
+        const posRaw = row['posicao'] ?? row['Posição'] ?? row['Posicao'] ?? String(idx + 1)
+        const posicao = parseInt(posRaw, 10) || idx + 1
+        const titulo  = row['titulo']  ?? row['Título']  ?? row['title'] ?? ''
+        const capa    = row['capa']    ?? row['Capa']    ?? row['cover'] ?? ''
+        return { posicao, titulo, capa }
+      })
+
+      // Capas da playlist: usa a capa da primeira entrada como fallback
+      const capaDaPlaylist = entries[0]?.capa ?? ''
+
+      return {
+        nome:          aba.nome,
+        subtitulo:     aba.subtitulo,
+        icone:         aba.icone,
+        cor:           aba.cor,
+        capaDaPlaylist,
+        entries,
+      } satisfies ChartData
+    })
+  )
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<ChartData> => r.status === 'fulfilled' && r.value.entries.length > 0)
+    .map(r => r.value)
+}
 
 export const fetchComentarios = (categoria: 'musicas' | 'musicVideos' | 'videos', idTopico?: string) => {
   const map = {

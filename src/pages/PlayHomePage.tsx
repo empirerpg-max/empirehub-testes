@@ -20,18 +20,22 @@ import {
   fetchVideos,
   fetchCharts,
   type SheetRow,
+  type ChartData,
 } from '@/lib/sheetsService'
 
 // ─── Mocks (fallback quando GAS_URL não está configurado) ─────────────────────
 let musicasMock: SheetRow[] = []
-let clipesMock: SheetRow[] = []
-let videosMock: SheetRow[] = []
+let clipesMock:  SheetRow[] = []
+let videosMock:  SheetRow[] = []
 let chartsMockData: ChartData[] = []
 
-try { musicasMock   = (await import('@/mocks/musicas.json')).default as SheetRow[] }   catch { /* sem mock */ }
-try { clipesMock    = (await import('@/mocks/clipes.json')).default  as SheetRow[] }   catch { /* sem mock */ }
-try { videosMock    = (await import('@/mocks/videos.json')).default  as SheetRow[] }   catch { /* sem mock */ }
-try { chartsMockData = (await import('@/mocks/charts.json')).default as ChartData[] }  catch { /* sem mock */ }
+// top-level await só é válido em módulos ES2022+; usamos IIFE para compatibilidade
+;(async () => {
+  try { musicasMock    = ((await import('@/mocks/musicas.json')) as { default: SheetRow[] }).default }    catch { /* sem mock */ }
+  try { clipesMock     = ((await import('@/mocks/clipes.json'))  as { default: SheetRow[] }).default }    catch { /* sem mock */ }
+  try { videosMock     = ((await import('@/mocks/videos.json'))  as { default: SheetRow[] }).default }    catch { /* sem mock */ }
+  try { chartsMockData = ((await import('@/mocks/charts.json'))  as { default: ChartData[] }).default }   catch { /* sem mock */ }
+})()
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = 'home' | 'musicas' | 'clipes' | 'videos' | 'forum'
@@ -52,14 +56,9 @@ export type ChartEntry = {
   playItem?: PlayItem
 }
 
-export type ChartData = {
-  nome: string
-  subtitulo: string
-  icone: string
-  cor: string
-  capaDaPlaylist: string
-  entries: ChartEntry[]
-}
+// ChartData é re-exportado do sheetsService — usamos o tipo de lá,
+// mas adicionamos playItem nas entries localmente
+export type { ChartData }
 
 const IS_DEV_MODE = typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('dev') === '1'
@@ -127,10 +126,6 @@ function formatDate(ts: number): string {
   return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
 }
 
-/**
- * Resolve o audioSrc de uma linha da planilha:
- * prioridade: telegram_file_id → youtube_id / youtubeId → drive_file_id / driveFileId → audioUrl → link
- */
 function resolveAudioSrc(row: SheetRow): string {
   const tgId = getField(row, 'telegram_file_id', 'telegramfileid', 'telegram_id')
   if (tgId) return `tg:${tgId}`
@@ -417,7 +412,9 @@ function ChartMiniCard({ chart, onOpen }: { chart: ChartData; onOpen: () => void
 }
 
 function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => void }) {
-  const queue = chart.entries.filter((e) => e.playItem?.audioSrc).map((e) => e.playItem!) as PlayItem[]
+  const queue = chart.entries
+    .filter((e): e is ChartEntry & { playItem: PlayItem } => !!e.playItem?.audioSrc)
+    .map(e => e.playItem)
   return (
     <div className="space-y-4">
       <button onClick={onBack} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors">
@@ -896,11 +893,10 @@ export function PlayHomePage() {
   const [forumTopicos, setForumTopicos] = useState<ForumTopico[]>([])
   const [forumSubTab, setForumSubTab] = useState<'topicos' | 'lancar'>('topicos')
 
-  // ── Dados da planilha ────────────────────────────────────────────────────
   const [musicasRows,     setMusicasRows]     = useState<SheetRow[]>([])
   const [musicVideosRows, setMusicVideosRows] = useState<SheetRow[]>([])
   const [videosRows,      setVideosRows]      = useState<SheetRow[]>([])
-  const [charts,          setCharts]          = useState<ChartData[]>(chartsMockData)
+  const [charts,          setCharts]          = useState<ChartData[]>([])
   const [loading,         setLoading]         = useState(true)
   const [fetchError,      setFetchError]      = useState<string | null>(null)
 
@@ -915,11 +911,12 @@ export function PlayHomePage() {
         fetchCharts().catch(() => [] as ChartData[]),
       ])
 
-      setMusicasRows(musicas.length       > 0 ? musicas      : musicasMock)
-      setMusicVideosRows(musicVideos.length > 0 ? musicVideos  : clipesMock)
-      setVideosRows(videos.length         > 0 ? videos       : videosMock)
-      setCharts((chartsData as ChartData[]).length > 0 ? chartsData as ChartData[] : chartsMockData)
+      setMusicasRows(musicas.length       > 0 ? musicas     : musicasMock)
+      setMusicVideosRows(musicVideos.length > 0 ? musicVideos : clipesMock)
+      setVideosRows(videos.length         > 0 ? videos      : videosMock)
+      setCharts(chartsData.length         > 0 ? chartsData  : chartsMockData)
     } catch (err) {
+      console.error('[PlayHomePage] loadData error:', err)
       setFetchError('Erro ao carregar dados. Usando dados locais.')
       setMusicasRows(musicasMock)
       setMusicVideosRows(clipesMock)
@@ -932,7 +929,6 @@ export function PlayHomePage() {
 
   useEffect(() => { loadData() }, [])
 
-  // ── Render por aba ───────────────────────────────────────────────────────
   const renderTab = () => {
     switch (activeTab) {
       case 'home':
@@ -954,7 +950,6 @@ export function PlayHomePage() {
       case 'forum':
         return (
           <div className="space-y-6">
-            {/* Sub-tabs do Fórum */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
               {(['topicos', 'lancar'] as const).map((s) => (
                 <button key={s} onClick={() => setForumSubTab(s)}
@@ -979,7 +974,6 @@ export function PlayHomePage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Radio className="size-5 text-primary" />
@@ -995,7 +989,6 @@ export function PlayHomePage() {
         </button>
       </div>
 
-      {/* Banner de erro */}
       {fetchError && (
         <div className="mx-4 mb-2 flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
           <AlertCircle className="size-3.5 text-yellow-400 flex-shrink-0" />
@@ -1003,7 +996,6 @@ export function PlayHomePage() {
         </div>
       )}
 
-      {/* Tabs nav */}
       <div className="flex gap-1 px-4 pb-3 flex-shrink-0 overflow-x-auto no-scrollbar">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
@@ -1020,7 +1012,6 @@ export function PlayHomePage() {
         ))}
       </div>
 
-      {/* Conteúdo da aba */}
       <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6">
         {renderTab()}
         {IS_DEV_MODE && <TelegramDevTab />}
