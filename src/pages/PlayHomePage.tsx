@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import {
-  Radio, Play, Music, Tv, MessageSquare, Send,
+  Radio, Play, Music, Tv, MessageSquare,
   ChevronRight, Home, Clapperboard, ChevronLeft,
   AlertCircle, Upload, Youtube,
   HardDrive, Loader2, CheckCircle2, FlaskConical,
-  RefreshCw,
+  RefreshCw, ArrowLeft,
 } from 'lucide-react'
 import { usePlay, type PlayItem } from '@/lib/playContext'
 import {
@@ -22,6 +22,8 @@ import {
   type SheetRow,
   type ChartData,
 } from '@/lib/sheetsService'
+import { ForumChat } from '@/components/ForumChat'
+import { UploadForm } from '@/components/UploadForm'
 
 // ─── Mocks (fallback quando GAS_URL não está configurado) ─────────────────────
 let musicasMock: SheetRow[] = []
@@ -29,7 +31,6 @@ let clipesMock:  SheetRow[] = []
 let videosMock:  SheetRow[] = []
 let chartsMockData: ChartData[] = []
 
-// top-level await só é válido em módulos ES2022+; usamos IIFE para compatibilidade
 ;(async () => {
   try { musicasMock    = ((await import('@/mocks/musicas.json')) as { default: SheetRow[] }).default }    catch { /* sem mock */ }
   try { clipesMock     = ((await import('@/mocks/clipes.json'))  as { default: SheetRow[] }).default }    catch { /* sem mock */ }
@@ -39,7 +40,8 @@ let chartsMockData: ChartData[] = []
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = 'home' | 'musicas' | 'clipes' | 'videos' | 'forum'
-type FonteAudio = 'youtube' | 'drive' | 'upload'
+type ForumSubTab = 'topicos' | 'lancar' | 'chat'
+type FonteAudio  = 'youtube' | 'drive' | 'upload'
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'home',    label: 'Início',  icon: Home },
@@ -56,9 +58,15 @@ export type ChartEntry = {
   playItem?: PlayItem
 }
 
-// ChartData é re-exportado do sheetsService — usamos o tipo de lá,
-// mas adicionamos playItem nas entries localmente
 export type { ChartData }
+
+type ForumTopico = {
+  id: string
+  item: PlayItem
+  fonte: FonteAudio
+  /** aba da planilha para buscar comentários */
+  categoria: 'musicas' | 'musicVideos' | 'videos'
+}
 
 const IS_DEV_MODE = typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('dev') === '1'
@@ -153,6 +161,13 @@ function rowToPlayItem(row: SheetRow, cat: PlayItem['categoria']): PlayItem {
   const id = getField(row, 'id', 'id_do_topico', 'idtopico', 'topico_id') || audioSrc || `${cat}-${titulo}`
   const letra = getField(row, 'letra', 'lyrics')
   return { id, titulo, artista, capa, audioSrc, letra, categoria: cat }
+}
+
+/** Infere a categoria do fórum a partir da categoria do PlayItem */
+function inferCategoria(cat: PlayItem['categoria']): ForumTopico['categoria'] {
+  if (cat === 'musicvideo') return 'musicVideos'
+  if (cat === 'video')      return 'videos'
+  return 'musicas'
 }
 
 // ─── Skeletons ────────────────────────────────────────────────────────────────
@@ -437,164 +452,14 @@ function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => vo
   )
 }
 
-// ─── ForumTab ─────────────────────────────────────────────────────────────────
-type ForumTopico = { id: string; item: PlayItem; fonte: FonteAudio }
-
-function LancarTab({ onTopicoCreated }: { onTopicoCreated: (t: ForumTopico) => void }) {
-  const [fonte, setFonte] = useState<FonteAudio>('youtube')
-  const [titulo, setTitulo] = useState('')
-  const [artista, setArtista] = useState('')
-  const [capa, setCapa] = useState('')
-  const [linkYT, setLinkYT] = useState('')
-  const [linkDrive, setLinkDrive] = useState('')
-  const [arquivo, setArquivo] = useState<File | null>(null)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [erro, setErro] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const fonteOptions: { id: FonteAudio; label: string; icon: React.ElementType }[] = [
-    { id: 'youtube', label: 'YouTube', icon: Youtube },
-    { id: 'drive',   label: 'Drive',   icon: HardDrive },
-    { id: 'upload',  label: 'Upload',  icon: Upload },
-  ]
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setErro('')
-    if (!titulo.trim()) { setErro('Título é obrigatório.'); return }
-
-    let audioSrc = ''
-    let fileId = ''
-
-    if (fonte === 'youtube') {
-      const ytId = extractYoutubeId(linkYT)
-      if (!ytId) { setErro('Link ou ID do YouTube inválido.'); return }
-      audioSrc = ytId
-      fileId = ytId
-    } else if (fonte === 'drive') {
-      const driveId = extractDriveId(linkDrive)
-      if (!driveId) { setErro('Link ou ID do Drive inválido.'); return }
-      audioSrc = driveId
-      fileId = driveId
-    } else {
-      if (!arquivo) { setErro('Selecione um arquivo de áudio ou vídeo.'); return }
-    }
-
-    setStatus('loading')
-    try {
-      if (fonte === 'upload' && arquivo) {
-        const meta = await uploadToTelegram(arquivo, { titulo, artista, capa })
-        audioSrc = `tg:${meta.file_id}`
-        fileId = meta.file_id
-      }
-
-      const playItem: PlayItem = {
-        id: `lancamento-${Date.now()}`,
-        titulo,
-        artista,
-        capa,
-        audioSrc,
-        categoria: 'musica',
-      }
-
-      const topico: ForumTopico = { id: fileId || playItem.id, item: playItem, fonte }
-      onTopicoCreated(topico)
-
-      setStatus('success')
-      setTimeout(() => {
-        setTitulo(''); setArtista(''); setCapa('')
-        setLinkYT(''); setLinkDrive(''); setArquivo(null)
-        setFonte('youtube'); setStatus('idle')
-      }, 2500)
-    } catch (err: unknown) {
-      setStatus('error')
-      setErro(err instanceof Error ? err.message : 'Erro desconhecido.')
-    }
-  }
-
-  if (status === 'success') {
-    return (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <CheckCircle2 className="size-12 text-primary" />
-        <div>
-          <p className="text-sm font-black uppercase tracking-tight">Lançamento enviado!</p>
-          <p className="text-xs text-muted-foreground mt-1">Tópico criado no Fórum.</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="grid grid-cols-3 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-        {fonteOptions.map(({ id, label, icon: Icon }) => (
-          <button type="button" key={id} onClick={() => setFonte(id)}
-            className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${fonte === id ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground'}`}>
-            <Icon className="size-4" />{label}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-2.5">
-        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título *"
-          className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-xs font-bold outline-none focus:border-primary/50 transition-colors" />
-        <input value={artista} onChange={(e) => setArtista(e.target.value)} placeholder="Artista"
-          className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-xs font-bold outline-none focus:border-primary/50 transition-colors" />
-        <input value={capa} onChange={(e) => setCapa(e.target.value)} placeholder="Capa — link Drive ou URL da imagem"
-          className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-xs font-bold outline-none focus:border-primary/50 transition-colors" />
-      </div>
-
-      {fonte === 'youtube' && (
-        <div className="flex items-center gap-2 px-4 h-11 bg-white/5 border border-white/10 rounded-2xl focus-within:border-primary/50 transition-colors">
-          <Youtube className="size-4 text-muted-foreground flex-shrink-0" />
-          <input value={linkYT} onChange={(e) => setLinkYT(e.target.value)}
-            placeholder="Link ou ID do YouTube"
-            className="flex-1 bg-transparent text-xs font-bold outline-none" />
-        </div>
-      )}
-      {fonte === 'drive' && (
-        <div className="flex items-center gap-2 px-4 h-11 bg-white/5 border border-white/10 rounded-2xl focus-within:border-primary/50 transition-colors">
-          <HardDrive className="size-4 text-muted-foreground flex-shrink-0" />
-          <input value={linkDrive} onChange={(e) => setLinkDrive(e.target.value)}
-            placeholder="Link ou ID do Google Drive"
-            className="flex-1 bg-transparent text-xs font-bold outline-none" />
-        </div>
-      )}
-      {fonte === 'upload' && (
-        <button type="button" onClick={() => fileRef.current?.click()}
-          className="w-full h-16 flex flex-col items-center justify-center gap-1.5 border border-dashed border-white/20 rounded-2xl text-muted-foreground active:border-primary/50 transition-colors">
-          <Upload className="size-5" />
-          <span className="text-[10px] font-black uppercase tracking-widest">
-            {arquivo ? arquivo.name : 'Selecionar arquivo'}
-          </span>
-          <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden"
-            onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
-        </button>
-      )}
-
-      {fonte === 'upload' && (
-        <p className="text-[10px] text-muted-foreground/50 text-center leading-relaxed">
-          O arquivo será enviado ao Telegram como storage.<br />
-          Nenhum dado de mídia é salvo no banco do app.
-        </p>
-      )}
-
-      {erro && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
-          <AlertCircle className="size-4 text-red-400 flex-shrink-0" />
-          <p className="text-xs text-red-400">{erro}</p>
-        </div>
-      )}
-
-      <button type="submit" disabled={status === 'loading'}
-        className="w-full h-12 rounded-2xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60 transition-opacity">
-        {status === 'loading' ? <><Loader2 className="size-4 animate-spin" /> Enviando...</> : <><Send className="size-4" /> Lançar</>}
-      </button>
-    </form>
-  )
-}
-
-function ForumTab({ topicos }: { topicos: ForumTopico[] }) {
+// ─── ForumTopicosList ─────────────────────────────────────────────────────────
+function ForumTopicosList({
+  topicos,
+  onSelect,
+}: {
+  topicos: ForumTopico[]
+  onSelect: (t: ForumTopico) => void
+}) {
   const { play } = usePlay()
   const queue = topicos.map(t => t.item)
 
@@ -603,7 +468,7 @@ function ForumTab({ topicos }: { topicos: ForumTopico[] }) {
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <MessageSquare className="size-10 text-muted-foreground/20" />
         <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/40">Nenhum lançamento ainda</p>
-        <p className="text-[10px] text-muted-foreground/30">Use o formulário acima para publicar uma música.</p>
+        <p className="text-[10px] text-muted-foreground/30">Use o formulário de lançamento para publicar.</p>
       </div>
     )
   }
@@ -611,8 +476,14 @@ function ForumTab({ topicos }: { topicos: ForumTopico[] }) {
   return (
     <div className="space-y-2">
       {topicos.map((t) => (
-        <button key={t.id} onClick={() => play(t.item, queue, { autoPlay: true })}
-          className="w-full flex items-center gap-3 p-3 bg-white/[0.03] border border-white/5 rounded-2xl active:border-primary/30 transition-all text-left">
+        <button
+          key={t.id}
+          onClick={() => {
+            play(t.item, queue, { autoPlay: true })
+            onSelect(t)
+          }}
+          className="w-full flex items-center gap-3 p-3 bg-white/[0.03] border border-white/5 rounded-2xl active:border-primary/30 transition-all text-left"
+        >
           <div className="size-12 rounded-xl overflow-hidden bg-primary/10 flex-shrink-0">
             {t.item.capa
               ? <img src={driveThumb(t.item.capa, 80)} alt="" className="w-full h-full object-cover" />
@@ -622,9 +493,11 @@ function ForumTab({ topicos }: { topicos: ForumTopico[] }) {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-black truncate uppercase tracking-tight">{t.item.titulo}</p>
             <p className="text-[10px] text-muted-foreground truncate">{t.item.artista || '—'}</p>
-            <p className="text-[9px] text-muted-foreground/40 mt-0.5 uppercase tracking-widest">{t.fonte}</p>
+            <p className="text-[9px] text-muted-foreground/40 mt-0.5 uppercase tracking-widest flex items-center gap-1">
+              <MessageSquare className="size-2.5" /> Abrir chat
+            </p>
           </div>
-          <Play className="size-4 text-muted-foreground/30 flex-shrink-0" fill="currentColor" />
+          <ChevronRight className="size-4 text-muted-foreground/30 flex-shrink-0" />
         </button>
       ))}
     </div>
@@ -887,11 +760,115 @@ function HomeTab({
   )
 }
 
+// ─── ForumSection ─────────────────────────────────────────────────────────────
+function ForumSection({
+  topicos,
+  onNovoTopico,
+}: {
+  topicos: ForumTopico[]
+  onNovoTopico: (t: ForumTopico) => void
+}) {
+  const [subTab, setSubTab]           = useState<ForumSubTab>('topicos')
+  const [selectedTopico, setSelected] = useState<ForumTopico | null>(null)
+
+  // Ao criar novo tópico: adiciona à lista e abre o chat diretamente
+  function handleNovoTopico(t: ForumTopico) {
+    onNovoTopico(t)
+    setSelected(t)
+    setSubTab('chat')
+  }
+
+  // Ao selecionar um tópico da lista: abre o chat
+  function handleSelect(t: ForumTopico) {
+    setSelected(t)
+    setSubTab('chat')
+  }
+
+  // ── View: Chat ──
+  if (subTab === 'chat' && selectedTopico) {
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Botão voltar */}
+        <button
+          onClick={() => { setSubTab('topicos'); setSelected(null) }}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors"
+        >
+          <ArrowLeft className="size-3.5" /> Voltar aos tópicos
+        </button>
+
+        {/* ForumChat real com polling, emojis e aba de letra */}
+        <ForumChat
+          topicId={selectedTopico.id}
+          categoria={selectedTopico.categoria}
+          item={selectedTopico.item}
+          nomeJogador="Visitante"
+          idJogador="anon"
+        />
+      </div>
+    )
+  }
+
+  // ── View: Lançar (UploadForm) ──
+  if (subTab === 'lancar') {
+    return (
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => setSubTab('topicos')}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors"
+        >
+          <ArrowLeft className="size-3.5" /> Voltar
+        </button>
+
+        <UploadForm
+          onSuccess={(threadId, fileUrl) => {
+            // Cria o tópico localmente com os dados do upload
+            const novoItem: PlayItem = {
+              id: threadId,
+              titulo: threadId,
+              artista: '',
+              capa: '',
+              audioSrc: fileUrl,
+              categoria: 'musica',
+            }
+            handleNovoTopico({
+              id: threadId,
+              item: novoItem,
+              fonte: 'upload',
+              categoria: 'musicas',
+            })
+          }}
+        />
+      </div>
+    )
+  }
+
+  // ── View: Lista de tópicos ──
+  return (
+    <div className="space-y-4">
+      {/* Subtabs: Tópicos | Lançar */}
+      <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
+        {(['topicos', 'lancar'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSubTab(s)}
+            className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              subTab === s ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground'
+            }`}
+          >
+            {s === 'topicos' ? '💬 Tópicos' : '🎵 Lançar'}
+          </button>
+        ))}
+      </div>
+
+      <ForumTopicosList topicos={topicos} onSelect={handleSelect} />
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function PlayHomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>('home')
+  const [activeTab, setActiveTab]     = useState<Tab>('home')
   const [forumTopicos, setForumTopicos] = useState<ForumTopico[]>([])
-  const [forumSubTab, setForumSubTab] = useState<'topicos' | 'lancar'>('topicos')
 
   const [musicasRows,     setMusicasRows]     = useState<SheetRow[]>([])
   const [musicVideosRows, setMusicVideosRows] = useState<SheetRow[]>([])
@@ -911,10 +888,10 @@ export function PlayHomePage() {
         fetchCharts().catch(() => [] as ChartData[]),
       ])
 
-      setMusicasRows(musicas.length       > 0 ? musicas     : musicasMock)
-      setMusicVideosRows(musicVideos.length > 0 ? musicVideos : clipesMock)
-      setVideosRows(videos.length         > 0 ? videos      : videosMock)
-      setCharts(chartsData.length         > 0 ? chartsData  : chartsMockData)
+      setMusicasRows(musicas.length         > 0 ? musicas      : musicasMock)
+      setMusicVideosRows(musicVideos.length > 0 ? musicVideos  : clipesMock)
+      setVideosRows(videos.length           > 0 ? videos       : videosMock)
+      setCharts(chartsData.length           > 0 ? chartsData   : chartsMockData)
     } catch (err) {
       console.error('[PlayHomePage] loadData error:', err)
       setFetchError('Erro ao carregar dados. Usando dados locais.')
@@ -949,25 +926,10 @@ export function PlayHomePage() {
         return <VideosTab rows={videosRows} loading={loading} />
       case 'forum':
         return (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-2 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
-              {(['topicos', 'lancar'] as const).map((s) => (
-                <button key={s} onClick={() => setForumSubTab(s)}
-                  className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    forumSubTab === s ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground'
-                  }`}>
-                  {s === 'topicos' ? '💬 Tópicos' : '🎵 Lançar'}
-                </button>
-              ))}
-            </div>
-            {forumSubTab === 'topicos'
-              ? <ForumTab topicos={forumTopicos} />
-              : <LancarTab onTopicoCreated={(t) => {
-                  setForumTopicos(prev => [t, ...prev])
-                  setForumSubTab('topicos')
-                }} />
-            }
-          </div>
+          <ForumSection
+            topicos={forumTopicos}
+            onNovoTopico={(t) => setForumTopicos(prev => [t, ...prev])}
+          />
         )
     }
   }
