@@ -141,6 +141,40 @@ function driveThumb(capa: string, size = 300): string {
   return capa;
 }
 
+/**
+ * Resolve a URL da thumbnail de um item de vídeo.
+ * Prioridade: thumbnail_url direta → drive thumb → vazia
+ */
+function resolveThumb(item: SheetItem, size = 300): string {
+  const thumbUrl = getField(item, "thumbnail_url", "thumbnailurl", "thumb", "thumbnail");
+  if (thumbUrl && thumbUrl.startsWith("http")) return thumbUrl;
+  const capa = getField(item, "capa", "cover", "capa_da_musica", "capadamusica");
+  return driveThumb(capa, size);
+}
+
+/**
+ * Monta o audioSrc correto para um item de vídeo da aba Videos.
+ * Se arquivo_fonte = "telegram" usa tg:FILE_ID
+ * Se tiver youtube_url usa o id do YouTube
+ * Se tiver drive_url usa o drive id
+ */
+function resolveVideoSrc(item: SheetItem): string {
+  const fonte = getField(item, "arquivo_fonte", "arquivofonte", "fonte").toLowerCase();
+  const tgFileId = getField(item, "telegram_file_id", "telegramfileid", "telegram_id");
+  const youtubeUrl = getField(item, "youtube_url", "youtubeurl", "youtube");
+  const driveUrl = getField(item, "drive_url", "driveurl", "drive");
+
+  if (fonte === "telegram" && tgFileId) return `tg:${tgFileId}`;
+  if (tgFileId) return `tg:${tgFileId}`;
+  if (youtubeUrl) {
+    const m = youtubeUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/) || youtubeUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+    if (m) return m[1];
+    return youtubeUrl;
+  }
+  if (driveUrl) return driveUrl;
+  return "";
+}
+
 function parseDataLancamento(item: SheetItem): number {
   const raw = getField(
     item,
@@ -150,6 +184,8 @@ function parseDataLancamento(item: SheetItem): number {
     "datadelancamento",
     "data_lancamento",
     "datalancamento",
+    "data_upload",
+    "dataupload",
     "data",
     "release_date",
     "releasedate",
@@ -162,6 +198,13 @@ function parseDataLancamento(item: SheetItem): number {
   if (brDate) {
     const iso = `${brDate[3]}-${brDate[2].padStart(2, "0")}-${brDate[1].padStart(2, "0")}`;
     const t = new Date(iso).getTime();
+    return isNaN(t) ? 0 : t;
+  }
+
+  // formato "2025-01-04 13:50:41"
+  const isoLike = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoLike) {
+    const t = new Date(isoLike[1]).getTime();
     return isNaN(t) ? 0 : t;
   }
 
@@ -224,6 +267,29 @@ function toPlayItemMusica(m: SheetItem): PlayItem {
     audioSrc,
     letra,
     categoria: "musica",
+  };
+}
+
+/** Converte uma linha da aba "Videos" (com telegram_file_id) em PlayItem */
+function toPlayItemVideo(m: SheetItem): PlayItem {
+  const id = getField(m, "id", "telegram_topic_id", "telegramtopicid");
+  const titulo = getField(m, "titulo", "title", "nome", "name");
+  const artista = getField(m, "artista", "artist", "enviado_por", "enviadopor");
+  const audioSrc = resolveVideoSrc(m);
+  const capa = resolveThumb(m, 400);
+  const tipoVideo = getField(m, "tipo_video", "tipovideo", "tipo").toLowerCase();
+
+  let categoria: PlayItem["categoria"] = "video";
+  if (tipoVideo === "musicvideo") categoria = "musicvideo";
+
+  return {
+    id: id || audioSrc || `video-${titulo}`,
+    titulo,
+    artista,
+    capa,
+    audioSrc,
+    letra: getField(m, "descricao", "description", "desc"),
+    categoria,
   };
 }
 
@@ -549,11 +615,17 @@ function SongCardWithDate({
 function VideoCard({ item, queue }: { item: PlayItem; queue: PlayItem[] }) {
   const { play, state } = usePlay();
   const isActive = state.currentIdx !== null && state.queue[state.currentIdx]?.id === item.id;
+  // thumb pode ser URL direta (Telegram bot) ou Drive
+  const thumbSrc = item.capa
+    ? item.capa.startsWith("http")
+      ? item.capa
+      : driveThumb(item.capa, 400)
+    : "";
   return (
     <button onClick={() => play(item, queue, { autoPlay: true })} className="flex flex-col gap-2 text-left group w-full">
       <div className={`relative w-full rounded-2xl overflow-hidden bg-primary/10 aspect-video ${isActive ? "ring-2 ring-primary" : ""} transition-all`}>
-        {item.capa ? (
-          <img src={driveThumb(item.capa, 400)} alt={item.titulo} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+        {thumbSrc ? (
+          <img src={thumbSrc} alt={item.titulo} className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <div className="w-full h-full grid place-items-center"><Tv className="size-8 text-primary/40" /></div>
         )}
@@ -562,6 +634,13 @@ function VideoCard({ item, queue }: { item: PlayItem; queue: PlayItem[] }) {
             <Play className="size-5 text-white" fill="white" />
           </div>
         </div>
+        {isActive && (
+          <div className="absolute bottom-2 left-2 flex gap-0.5 items-end">
+            {[3, 5, 4].map((h, i) => (
+              <div key={i} className="w-1 bg-primary rounded-full animate-bounce" style={{ height: `${h * 3}px`, animationDelay: `${i * 100}ms` }} />
+            ))}
+          </div>
+        )}
       </div>
       <div className="min-w-0">
         <p className={`text-xs font-black truncate uppercase tracking-tight ${isActive ? "text-primary" : ""}`}>{item.titulo || "—"}</p>
@@ -597,6 +676,13 @@ function RowTrack({
       return formatDate(ts);
     }
 
+    // "2025-01-04 13:50:41"
+    const isoLike = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoLike) {
+      const t = new Date(isoLike[1]).getTime();
+      return isNaN(t) ? s : formatDate(t);
+    }
+
     const t = new Date(s).getTime();
     return isNaN(t) ? s : formatDate(t);
   }, [rawDate]);
@@ -621,7 +707,7 @@ function RowTrack({
       </div>
       <div className="size-10 rounded-xl overflow-hidden bg-primary/10 flex-shrink-0">
         {item.capa ? (
-          <img src={driveThumb(item.capa, 80)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+          <img src={item.capa.startsWith("http") ? item.capa : driveThumb(item.capa, 80)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <div className="w-full h-full grid place-items-center"><Music className="size-4 text-primary/30" /></div>
         )}
@@ -673,7 +759,7 @@ function ChartRow({ entry, queue }: { entry: ChartEntry; queue: PlayItem[] }) {
       </div>
       <div className="size-10 rounded-xl overflow-hidden bg-white/[0.05] flex-shrink-0">
         {entry.capa ? (
-          <img src={driveThumb(entry.capa, 80)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+          <img src={entry.capa.startsWith("http") ? entry.capa : driveThumb(entry.capa, 80)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <div className="w-full h-full grid place-items-center"><Music className="size-4 text-white/10" /></div>
         )}
@@ -710,7 +796,7 @@ function ChartMiniCard({ chart, onOpen }: { chart: ChartData; onOpen: () => void
     >
       <div className="relative w-full aspect-square bg-white/[0.05] grid place-items-center">
         {chart.capaDaPlaylist ? (
-          <img src={driveThumb(chart.capaDaPlaylist, 300)} alt={chart.nome} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+          <img src={chart.capaDaPlaylist.startsWith("http") ? chart.capaDaPlaylist : driveThumb(chart.capaDaPlaylist, 300)} alt={chart.nome} className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <span className="text-5xl">{chart.icone}</span>
         )}
@@ -733,7 +819,7 @@ function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => vo
       <div className="flex items-center gap-4 p-4 bg-white/[0.03] border border-white/[0.06] rounded-[1.5rem]">
         <div className="size-16 rounded-2xl overflow-hidden bg-white/[0.05] flex-shrink-0">
           {chart.capaDaPlaylist ? (
-            <img src={driveThumb(chart.capaDaPlaylist, 120)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+            <img src={chart.capaDaPlaylist.startsWith("http") ? chart.capaDaPlaylist : driveThumb(chart.capaDaPlaylist, 120)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="w-full h-full grid place-items-center"><span className="text-3xl">{chart.icone}</span></div>
           )}
@@ -995,7 +1081,7 @@ function LancarTab() {
         </div>
       </div>
 
-      {/* Música Substituída — só aparece se substituir=Sim */}
+      {/* Música Substituída */}
       {form.substituir === "Sim" && (
         <div>
           <label className={labelCls}>Nome da música substituída *</label>
@@ -1407,7 +1493,6 @@ function MusicasTab({
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs */}
       <div className="flex gap-1.5 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
         {MUSICAS_SUBTABS.map((st) => (
           <button
@@ -1424,7 +1509,6 @@ function MusicasTab({
         ))}
       </div>
 
-      {/* Lançamentos */}
       {subTab === "lancamentos" && (
         <div className="space-y-1">
           {loading ? (
@@ -1450,7 +1534,6 @@ function MusicasTab({
         </div>
       )}
 
-      {/* Álbuns */}
       {subTab === "albuns" && (
         <div className="space-y-3">
           <SectionHeader icon={<Music className="size-4 text-primary" />} title="Álbuns" />
@@ -1462,8 +1545,107 @@ function MusicasTab({
         </div>
       )}
 
-      {/* Lançar — Formulário real */}
       {subTab === "lancar" && <LancarTab />}
+    </div>
+  );
+}
+
+// ─── Aba Clipes (Music Videos da aba Empire_Play_Music_Videos) ─────────────
+function ClipesTab({
+  playMusicVideosDB,
+  loading,
+}: {
+  playMusicVideosDB: SheetItem[];
+  loading: boolean;
+}) {
+  const sorted = useMemo(
+    () => [...playMusicVideosDB].sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a)),
+    [playMusicVideosDB]
+  );
+  const playItems = useMemo(() => sorted.map((m) => toPlayItem(m, "musicvideo")), [sorted]);
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader icon={<Clapperboard className="size-4 text-primary" />} title="Clipes" />
+      {loading ? (
+        <SkeletonGrid cols={2} rows={3} />
+      ) : playItems.length === 0 ? (
+        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum clipe disponível.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {playItems.map((item) => (
+            <VideoCard key={item.id} item={item} queue={playItems} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Aba Vídeos (aba "Videos" — Telegram file_id) ──────────────────────────
+function VideosTab({
+  videosDB,
+  loading,
+}: {
+  videosDB: SheetItem[];
+  loading: boolean;
+}) {
+  const [filtro, setFiltro] = useState<"todos" | "musicvideo" | "video">("todos");
+
+  const allItems = useMemo(
+    () =>
+      [...videosDB]
+        .filter((m) => {
+          const status = getField(m, "status").toLowerCase();
+          // só exibe itens prontos (ready_telegram ou sem status)
+          return status === "" || status === "ready_telegram" || status === "ready";
+        })
+        .sort((a, b) => parseDataLancamento(b) - parseDataLancamento(a))
+        .map(toPlayItemVideo),
+    [videosDB]
+  );
+
+  const filtered = useMemo(() => {
+    if (filtro === "todos") return allItems;
+    return allItems.filter((item) => item.categoria === filtro);
+  }, [allItems, filtro]);
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader icon={<Tv className="size-4 text-primary" />} title="Vídeos" />
+
+      {/* Filtro */}
+      <div className="flex gap-1.5 p-1 bg-white/[0.03] border border-white/5 rounded-2xl">
+        {([
+          ["todos", "Todos"],
+          ["musicvideo", "Music Videos"],
+          ["video", "Outros"],
+        ] as [string, string][]).map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setFiltro(val as typeof filtro)}
+            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              filtro === val
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-muted-foreground"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <SkeletonGrid cols={2} rows={3} />
+      ) : filtered.length === 0 ? (
+        <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum vídeo disponível.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map((item) => (
+            <VideoCard key={item.id} item={item} queue={filtered} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1471,6 +1653,8 @@ function MusicasTab({
 // ─── Main Page ─────────────────────────────────────────────────────────────
 function PlayHomePage() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
+
+  // ── dados carregados UMA vez e nunca resetados ao trocar de aba ──
   const [musicasDB, setMusicasDB] = useState<SheetItem[]>([]);
   const [playMusicVideosDB, setPlayMusicVideosDB] = useState<SheetItem[]>([]);
   const [videosDB, setVideosDB] = useState<SheetItem[]>([]);
@@ -1484,7 +1668,8 @@ function PlayHomePage() {
     Promise.all([
       fetchSheetValues("Empire_Play"),
       fetchSheetValues("Empire_Play_Music_Videos"),
-      fetchSheetValues("Empire_Play_Videos"),
+      // aba se chama "Videos" dentro da planilha Empire_Play
+      fetchSheetValues("Videos"),
     ]).then(([musicas, pmv, videos]) => {
       setMusicasDB(sheetRowsToObjects(musicas.values));
       setPlayMusicVideosDB(sheetRowsToObjects(pmv.values));
@@ -1524,25 +1709,18 @@ function PlayHomePage() {
     });
   }, []);
 
-  const clipes = useMemo(() => playMusicVideosDB.map((m) => toPlayItem(m, "musicvideo")), [playMusicVideosDB]);
-  const videos = useMemo(() => videosDB.map((m) => toPlayItem(m, "video")), [videosDB]);
-
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
-        <div className="size-8 rounded-xl bg-primary/20 grid place-items-center flex-shrink-0">
-          <Radio className="size-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase tracking-widest leading-none">Empire Play</p>
-          <p className="text-[9px] text-muted-foreground/60 mt-0.5">Catálogo · Fórum · Lançamentos</p>
-        </div>
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur border-b border-white/[0.06]">
+        <Radio className="size-5 text-primary" />
+        <span className="text-sm font-black uppercase tracking-widest">Empire Play</span>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
-        {activeTab === "home" && (
+      {/* ── Conteúdo da aba ativa ── */}
+      <main className="flex-1 px-4 py-5 pb-32 overflow-y-auto">
+        {/* Renderiza TODAS as abas mas só mostra a ativa — evita reset de estado ao navegar */}
+        <div className={activeTab === "home" ? "block" : "hidden"}>
           <HomeTab
             musicasDB={musicasDB}
             playMusicVideosDB={playMusicVideosDB}
@@ -1552,59 +1730,35 @@ function PlayHomePage() {
             loading={loading}
             onTabChange={setActiveTab}
           />
-        )}
-        {activeTab === "musicas" && (
+        </div>
+        <div className={activeTab === "musicas" ? "block" : "hidden"}>
           <MusicasTab musicasDB={musicasDB} loading={loading} />
-        )}
-        {activeTab === "clipes" && (
-          <div className="space-y-4">
-            <SectionHeader icon={<Clapperboard className="size-4 text-primary" />} title="Clipes" />
-            {loading ? (
-              <SkeletonGrid cols={2} rows={3} />
-            ) : clipes.length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum clipe disponível.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {clipes.map((item) => <VideoCard key={item.id} item={item} queue={clipes} />)}
-              </div>
-            )}
-          </div>
-        )}
-        {activeTab === "videos" && (
-          <div className="space-y-4">
-            <SectionHeader icon={<Tv className="size-4 text-primary" />} title="Vídeos" />
-            {loading ? (
-              <SkeletonGrid cols={2} rows={3} />
-            ) : videos.length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground py-8 opacity-40">Nenhum vídeo disponível.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {videos.map((item) => <VideoCard key={item.id} item={item} queue={videos} />)}
-              </div>
-            )}
-          </div>
-        )}
-        {activeTab === "forum" && <ForumTab />}
+        </div>
+        <div className={activeTab === "clipes" ? "block" : "hidden"}>
+          <ClipesTab playMusicVideosDB={playMusicVideosDB} loading={loading} />
+        </div>
+        <div className={activeTab === "videos" ? "block" : "hidden"}>
+          <VideosTab videosDB={videosDB} loading={loading} />
+        </div>
+        <div className={activeTab === "forum" ? "block" : "hidden"}>
+          <ForumTab />
+        </div>
       </main>
 
-      {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-xl border-t border-white/[0.06] flex">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex flex-col items-center gap-1 py-3 transition-all ${
-                isActive ? "text-primary" : "text-muted-foreground/50"
-              }`}
-            >
-              <Icon className="size-5" />
-              <span className="text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* ── Bottom Nav ── */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 flex items-center bg-background/90 backdrop-blur border-t border-white/[0.06] pb-safe">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
+              activeTab === id ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <Icon className="size-5" />
+            <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );
