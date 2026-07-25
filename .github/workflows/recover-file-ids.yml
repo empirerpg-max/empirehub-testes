@@ -1,0 +1,30 @@
+name: Recover File IDs (sem reenvio)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run recovery script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_SOURCE_CHAT_ID: ${{ secrets.VITE_SOURCE_CHAT_ID }}
+          TELEGRAM_HUB_CHAT_ID: ${{ secrets.VITE_TELEGRAM_CHANNEL_ID }}
+          SHEETS_API_KEY: ${{ secrets.SHEETS_API_KEY }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+        run: npx tsx scripts/recoverFileIds.ts
