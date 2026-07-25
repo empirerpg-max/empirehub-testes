@@ -36,6 +36,7 @@ jobs:
           VITE_SOURCE_CHAT_ID: ${{ secrets.VITE_SOURCE_CHAT_ID }}
           VITE_TELEGRAM_CHANNEL_ID: ${{ secrets.VITE_TELEGRAM_CHANNEL_ID }}
           VITE_SHEETS_API_KEY: ${{ secrets.SHEETS_API_KEY }}
+          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
