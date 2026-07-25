@@ -1,6 +1,6 @@
 // ============================================================
 // VideoPlayer — Player de vídeo moderno
-// Suporta: YouTube (iframe), Drive (iframe preview), Telegram (video nativo)
+// Suporta: YouTube (iframe), Drive (iframe /preview), Telegram (video nativo)
 // ============================================================
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { VideoItem } from '../../types';
@@ -49,31 +49,44 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Resolve a URL dependendo da fonte
+  // ─── Resolve a URL dependendo da fonte ───────────────────────────────────
   useEffect(() => {
     setIsLoading(true);
     setError(null);
+    setResolvedUrl('');
 
     async function resolve() {
       try {
-        if (video.source === 'youtube' || isYoutubeUrl(video.videoUrl)) {
-          const parsed = parseYoutubeUrl(video.videoUrl);
+        const url = video.videoUrl ?? '';
+
+        // 1. YouTube
+        if (video.source === 'youtube' || isYoutubeUrl(url)) {
+          const parsed = parseYoutubeUrl(url);
           if (!parsed) throw new Error('URL do YouTube inválida');
           setResolvedUrl(parsed.embedUrl + (autoPlay ? '&autoplay=1' : ''));
           setMode('iframe');
-        } else if (video.source === 'drive' || isDriveUrl(video.videoUrl)) {
-          const embed = driveToEmbedUrl(video.videoUrl);
+
+        // 2. Google Drive
+        } else if (video.source === 'drive' || isDriveUrl(url)) {
+          const embed = driveToEmbedUrl(url);
           if (!embed) throw new Error('URL do Drive inválida');
           setResolvedUrl(embed);
           setMode('iframe');
-        } else if (video.source === 'telegram' && video.telegramFileId) {
-          const info = await getTelegramFileUrl(video.telegramFileId);
-          setResolvedUrl(info.file_url);
+
+        // 3. Telegram (via file_id)
+        } else if (video.source === 'telegram') {
+          if (!video.telegramFileId) throw new Error('telegram_file_id ausente para este vídeo.');
+          const { file_url } = await getTelegramFileUrl(video.telegramFileId);
+          setResolvedUrl(file_url);
           setMode('native');
+
+        // 4. URL direta (fallback)
+        } else if (url) {
+          setResolvedUrl(url);
+          setMode('native');
+
         } else {
-          // URL direta
-          setResolvedUrl(video.videoUrl);
-          setMode('native');
+          throw new Error('Nenhuma URL de vídeo disponível.');
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erro ao carregar vídeo');
@@ -85,18 +98,18 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
     resolve();
   }, [video, autoPlay]);
 
-  // Eventos do <video> nativo
+  // ─── Eventos do <video> nativo ───────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v || mode !== 'native') return;
 
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onTimeUpdate = () => setCurrentTime(v.currentTime);
-    const onDuration = () => setDuration(v.duration);
-    const onWaiting = () => setIsLoading(true);
-    const onCanPlay = () => setIsLoading(false);
-    const onError = () => setError('Erro ao reproduzir vídeo.');
+    const onPlay        = () => setIsPlaying(true);
+    const onPause       = () => setIsPlaying(false);
+    const onTimeUpdate  = () => setCurrentTime(v.currentTime);
+    const onDuration    = () => setDuration(v.duration);
+    const onWaiting     = () => setIsLoading(true);
+    const onCanPlay     = () => setIsLoading(false);
+    const onError       = () => setError('Erro ao reproduzir vídeo.');
     const onVolumeChange = () => { setVolume(v.volume); setIsMuted(v.muted); };
 
     v.addEventListener('play', onPlay);
@@ -120,9 +133,9 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
       v.removeEventListener('error', onError);
       v.removeEventListener('volumechange', onVolumeChange);
     };
-  }, [mode, autoPlay]);
+  }, [mode, resolvedUrl, autoPlay]);
 
-  // Auto-ocultar controles
+  // ─── Auto-ocultar controles ──────────────────────────────────────────────
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -131,7 +144,7 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
     }, 3000);
   }, [isPlaying]);
 
-  // Fullscreen
+  // ─── Fullscreen ──────────────────────────────────────────────────────────
   const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current;
     if (!el) return;
@@ -209,9 +222,10 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
 
       {/* Erro */}
       {error && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center"
+          style={{ background: 'oklch(0.1 0 0)' }}>
           <span style={{ fontSize: '2rem' }}>⚠️</span>
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{error}</p>
+          <p className="text-sm" style={{ color: 'oklch(0.7 0 0)' }}>{error}</p>
         </div>
       )}
 
@@ -271,13 +285,11 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
 
             {/* Controles inferiores */}
             <div className="px-4 pb-3 flex flex-col gap-2">
-              {/* Info */}
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-sm font-semibold text-white truncate">{video.title}</p>
                   <p className="text-xs" style={{ color: 'oklch(1 0 0 / 70%)' }}>{video.artist}</p>
                 </div>
-                {/* Fullscreen */}
                 <button
                   onClick={toggleFullscreen}
                   aria-label={isFullscreen ? 'Sair do fullscreen' : 'Fullscreen'}
