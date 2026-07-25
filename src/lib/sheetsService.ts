@@ -8,6 +8,8 @@
  *   VITE_GAS_URL (opcional)      — Apps Script Web App para escrita
  */
 
+import type { PlayItem } from '@/lib/playContext'
+
 const API_KEY = import.meta.env.VITE_SHEETS_API_KEY as string | undefined
 const SPREADSHEET_ID = '1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo'
 const GAS_URL = import.meta.env.VITE_GAS_URL as string | undefined
@@ -73,13 +75,15 @@ export const fetchAlbuns      = () => fetchSheet(SHEET_NAMES.albuns)
 // ── Tipos de Chart ──────────────────────────────────────────────────────────
 /**
  * Uma entrada de posição no chart.
- * Nota: `playItem` é adicionado APENAS no PlayHomePage.tsx ao cruzar com
- * os dados da planilha de músicas. NÃO pertence a este tipo base.
+ * `playItem` é adicionado APENAS em PlayHomePage.tsx ao cruzar com
+ * os dados da planilha de músicas — por isso é opcional aqui.
  */
 export interface ChartEntry {
   posicao: number
   titulo: string
   capa: string
+  /** Preenchido pelo PlayHomePage após cross-reference com Musicas. */
+  playItem?: PlayItem
 }
 
 export interface ChartData {
