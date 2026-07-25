@@ -3,10 +3,10 @@ name: Build & Deploy → GitHub Pages
 on:
   push:
     branches: [main]
-  workflow_dispatch: # permite rodar manualmente pelo GitHub UI
+  workflow_dispatch:
 
 permissions:
-  contents: write # precisa escrever na pasta docs/
+  contents: write
 
 jobs:
   build-and-deploy:
@@ -14,31 +14,23 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      # 1. Checkout do código
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Node 20
-      - name: Setup Node
+      - name: Setup Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '24'
 
-      # 3. Instala dependências
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      # 4. Build — injeta o Secret como variável de ambiente
       - name: Build Vite
         env:
           VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
           VITE_SHEETS_API_KEY: ${{ secrets.VITE_SHEETS_API_KEY }}
         run: npm run build
-        # O build gera a pasta /docs conforme vite.config.ts
 
-      # 5. Commita a pasta /docs de volta na main
-      # (GitHub Pages está configurado para servir /docs da branch main)
       - name: Commit docs/ to main
         run: |
           git config user.name  "github-actions[bot]"
