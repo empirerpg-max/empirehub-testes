@@ -1,9 +1,5 @@
 // ============================================================
 // play.index.tsx — rota /play/ (React Router DOM v6)
-// Fixes aplicados:
-//   1. Removido @tanstack/react-router (não instalado) — usa react-router-dom
-//   2. ChartEntry.playItem agora tipado como PlayItem (não optional) no processChart
-//   3. Cast do mock removido — import dinâmico removido em produção (dados reais via GAS)
 // ============================================================
 import { useEffect, useState, useMemo, useRef } from "react";
 import {
@@ -80,8 +76,8 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "forum",   label: "Fórum",   icon: MessageSquare },
 ];
 
-// Fix: playItem é sempre definido em entradas válidas do chart.
-// O campo é opcional apenas para satisfazer o filter type-guard abaixo.
+// FIX: playItem é opcional para que o type-guard no filter funcione sem
+// criar uma intersecção incompatível com ChartEntry.
 export type ChartEntry = {
   posicao: number;
   titulo: string;
@@ -383,6 +379,15 @@ async function fetchSheetValues(aba: string): Promise<{ values: string[][]; erro
   }
 }
 
+// ─── FIX PRINCIPAL: processChart ──────────────────────────────────────────
+// Problema original (L395): o .map() retornava (ChartEntry | null)[]
+// e o .filter() com type predicate era incompatível pois ChartEntry não
+// tem posicao nullable, causando erro no predicado e no sort.
+//
+// Solução: separar a construção em dois passos com tipos explícitos:
+//   1. map → (ChartEntry | null)[]  (tipo interno temporário)
+//   2. filter com NonNullable narrowing → ChartEntry[]
+//   3. sort sem risco de null pois posicao é number em ChartEntry
 function processChart(
   chartValues: string[][],
   isVideo: boolean,
@@ -392,40 +397,45 @@ function processChart(
 
   const rows = sheetRowsToObjects(chartValues);
 
-  const entries: ChartEntry[] = rows
-    .map((row) => {
-      const posStr = getField(row, "Posição", "Posicao", "Pos", "position", "rank");
-      const posicao = parseInt(posStr.replace(/\D/g, "")) || 0;
+  // Passo 1: map com tipo de retorno explícito nullable
+  const rawEntries: (ChartEntry | null)[] = rows.map((row) => {
+    const posStr = getField(row, "Posição", "Posicao", "Pos", "position", "rank");
+    const posicao = parseInt(posStr.replace(/\D/g, "")) || 0;
 
-      const titulo = isVideo
-        ? getField(row, "Nome do vídeo", "Nome do video", "nomedovideo", "titulo", "title")
-        : getField(row, "Nome da música", "Nome da musica", "nomedamusica", "titulo", "title", "nome");
+    const titulo = isVideo
+      ? getField(row, "Nome do vídeo", "Nome do video", "nomedovideo", "titulo", "title")
+      : getField(row, "Nome da música", "Nome da musica", "nomedamusica", "titulo", "title", "nome");
 
-      const capa = isVideo
-        ? getField(row, "Thumb", "thumb", "thumbnail", "capa", "Capa da música", "Capa da musica")
-        : getField(row, "Capa da música", "Capa da musica", "capadamusica", "capa", "cover");
+    const capa = isVideo
+      ? getField(row, "Thumb", "thumb", "thumbnail", "capa", "Capa da música", "Capa da musica")
+      : getField(row, "Capa da música", "Capa da musica", "capadamusica", "capa", "cover");
 
-      const idTopico  = getField(row, "ID do tópico", "ID do topico", "idtopico", "id");
-      const linkAudio = getField(row, "Link do áudio", "Link do audio", "linkdoaudio", "link", "audio", "url");
-      const criador   = getField(row, "ID do criador", "iddocriador", "criador", "artista", "artist");
+    const idTopico  = getField(row, "ID do tópico", "ID do topico", "idtopico", "id");
+    const linkAudio = getField(row, "Link do áudio", "Link do audio", "linkdoaudio", "link", "audio", "url");
+    const criador   = getField(row, "ID do criador", "iddocriador", "criador", "artista", "artist");
 
-      if (!posicao || !titulo) return null;
+    if (!posicao || !titulo) return null;
 
-      // Fix L416: playItem é sempre construído aqui; acesso seguro garantido
-      const playItem: PlayItem = {
-        id: idTopico || `chart-${posicao}`,
-        titulo,
-        artista: criador,
-        capa,
-        audioSrc: linkAudio,
-        letra: "",
-        categoria: isVideo ? "musicvideo" : "musica",
-      };
+    const playItem: PlayItem = {
+      id: idTopico || `chart-${posicao}`,
+      titulo,
+      artista: criador,
+      capa,
+      audioSrc: linkAudio,
+      letra: "",
+      categoria: isVideo ? "musicvideo" : "musica",
+    };
 
-      return { posicao, titulo, capa, playItem } satisfies ChartEntry;
-    })
-    .filter((e): e is ChartEntry => e !== null && e.posicao > 0)
-    .sort((a, b) => a.posicao - b.posicao)
+    // Retorna objeto tipado como ChartEntry (playItem opcional satisfeito)
+    const entry: ChartEntry = { posicao, titulo, capa, playItem };
+    return entry;
+  });
+
+  // Passo 2: narrowing sem type predicate problemático
+  // Usamos uma asserção de tipo segura após o filtro de null
+  const entries: ChartEntry[] = rawEntries
+    .filter((e): e is ChartEntry => e !== null)
+    .sort((a, b) => a.posicao - b.posicao)  // posicao é number, nunca null aqui
     .slice(0, maxEntries);
 
   return { entries, capaDaPlaylist: entries[0]?.capa ?? "" };
@@ -711,7 +721,6 @@ function RowTrack({
 
 function ChartRow({ entry, queue }: { entry: ChartEntry; queue: PlayItem[] }) {
   const { play, state } = usePlay();
-  // Fix L416: playItem pode ser undefined (filtro garante mas TS não sabe)
   const isActive =
     entry.playItem != null &&
     state.currentIdx !== null &&
@@ -795,10 +804,17 @@ function ChartMiniCard({ chart, onOpen }: { chart: ChartData; onOpen: () => void
   );
 }
 
+// FIX L427-428: type guard reescrito sem intersecção incompatível.
+// Antes: (e): e is ChartEntry & { playItem: PlayItem }
+//   → TS reclamava porque ChartEntry já tem playItem?: PlayItem (opcional),
+//     então a intersecção com { playItem: PlayItem } não era assignable.
+// Depois: verificamos e.playItem != null e !!e.playItem.audioSrc
+//   → narrowing puro, sem type predicate sobre o parâmetro.
 function ChartDetailView({ chart, onBack }: { chart: ChartData; onBack: () => void }) {
-  const queue = chart.entries
-    .filter((e): e is ChartEntry & { playItem: PlayItem } => e.playItem != null && !!e.playItem.audioSrc)
-    .map((e) => e.playItem);
+  const queue: PlayItem[] = chart.entries
+    .filter((e) => e.playItem != null && !!e.playItem.audioSrc)
+    .map((e) => e.playItem as PlayItem);
+
   return (
     <div className="space-y-4">
       <button onClick={onBack} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground active:text-primary transition-colors">
@@ -973,7 +989,6 @@ function LancarTab() {
         <p className="text-[11px] text-muted-foreground/60">Preencha os dados do lançamento. Será registrado via Empire GAS.</p>
       </div>
 
-      {/* Título */}
       <div>
         <label className={labelCls}>Título da música *</label>
         <input
@@ -986,7 +1001,6 @@ function LancarTab() {
         />
       </div>
 
-      {/* Tipo Single / Tipo Música */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls}>Tipo de single</label>
@@ -1011,7 +1025,6 @@ function LancarTab() {
         </div>
       </div>
 
-      {/* Artistas */}
       <div>
         <label className={labelCls}>Artistas</label>
         <div className="space-y-2">
@@ -1045,7 +1058,6 @@ function LancarTab() {
         </div>
       </div>
 
-      {/* Substituir */}
       <div>
         <label className={labelCls}>Substitui outra música?</label>
         <div className="flex gap-2">
@@ -1075,7 +1087,6 @@ function LancarTab() {
         )}
       </div>
 
-      {/* Fonte da Mídia */}
       <div>
         <label className={labelCls}>Fonte da mídia</label>
         <div className="flex gap-2 flex-wrap mb-3">
@@ -1104,7 +1115,6 @@ function LancarTab() {
         <p className="text-[10px] text-muted-foreground/50 mt-1.5">{FONTE_CONFIG[form.fonte].hint}</p>
       </div>
 
-      {/* Erro */}
       {status === "error" && (
         <div className="flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
           <AlertCircle className="size-4 text-red-400 flex-shrink-0 mt-0.5" />
@@ -1112,7 +1122,6 @@ function LancarTab() {
         </div>
       )}
 
-      {/* Submit */}
       <button
         type="submit"
         disabled={status === "loading" || !form.titulo || !form.urlOuFileId}
@@ -1187,19 +1196,16 @@ function ForumTab() {
 export default function PlayHomePage() {
   const [tab, setTab] = useState<Tab>("home");
 
-  // Dados das abas principais
   const [musicas, setMusicas] = useState<SheetItem[]>([]);
   const [clipes, setClipes] = useState<SheetItem[]>([]);
   const [videos, setVideos] = useState<SheetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Charts
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [activeChart, setActiveChart] = useState<ChartData | null>(null);
 
-  // Carrega abas principais
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -1229,7 +1235,6 @@ export default function PlayHomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Carrega charts
   useEffect(() => {
     let cancelled = false;
     async function loadCharts() {
@@ -1260,7 +1265,6 @@ export default function PlayHomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Converte para PlayItem
   const musicasPlay = useMemo(() => musicas.map(toPlayItemMusica), [musicas]);
   const clipesPlay  = useMemo(() => clipes.map((m) => toPlayItem(m, "musicvideo")), [clipes]);
   const videosPlay  = useMemo(() => videos.map(toPlayItemVideo), [videos]);
@@ -1276,10 +1280,8 @@ export default function PlayHomePage() {
       .slice(0, 8);
   }, [musicas, clipes]);
 
-  // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-dvh bg-background text-foreground pb-24">
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 flex items-center gap-3">
         <div className="size-8 rounded-xl bg-primary/20 border border-primary/30 grid place-items-center flex-shrink-0">
           <Radio className="size-4 text-primary" />
@@ -1300,7 +1302,6 @@ export default function PlayHomePage() {
         </button>
       </header>
 
-      {/* Tab Content */}
       <main className="px-4 pt-4">
         {error && (
           <div className="mb-4 flex items-start gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
@@ -1309,10 +1310,8 @@ export default function PlayHomePage() {
           </div>
         )}
 
-        {/* HOME */}
         {tab === "home" && (
           <div className="space-y-8">
-            {/* Recentes */}
             <section>
               <SectionHeader icon={<Radio className="size-3.5" />} title="Recentes" onMore={() => setTab("musicas")} />
               {loading ? <SkeletonGrid cols={3} rows={2} /> : (
@@ -1324,7 +1323,6 @@ export default function PlayHomePage() {
               )}
             </section>
 
-            {/* Charts */}
             <section>
               <SectionHeader icon={<span className="text-xs">🏆</span>} title="Charts" />
               {chartsLoading ? <SkeletonGrid cols={3} rows={1} /> : (
@@ -1340,7 +1338,6 @@ export default function PlayHomePage() {
               )}
             </section>
 
-            {/* Músicas */}
             {musicasPlay.length > 0 && (
               <section>
                 <SectionHeader icon={<Music className="size-3.5" />} title="Músicas" onMore={() => setTab("musicas")} />
@@ -1354,7 +1351,6 @@ export default function PlayHomePage() {
               </section>
             )}
 
-            {/* Clipes */}
             {clipesPlay.length > 0 && (
               <section>
                 <SectionHeader icon={<Clapperboard className="size-3.5" />} title="Clipes" onMore={() => setTab("clipes")} />
@@ -1370,7 +1366,6 @@ export default function PlayHomePage() {
           </div>
         )}
 
-        {/* MÚSICAS */}
         {tab === "musicas" && (
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">
@@ -1392,7 +1387,6 @@ export default function PlayHomePage() {
           </div>
         )}
 
-        {/* CLIPES */}
         {tab === "clipes" && (
           <div className="space-y-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -1410,7 +1404,6 @@ export default function PlayHomePage() {
           </div>
         )}
 
-        {/* VÍDEOS */}
         {tab === "videos" && (
           <div className="space-y-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -1428,10 +1421,8 @@ export default function PlayHomePage() {
           </div>
         )}
 
-        {/* FÓRUM */}
         {tab === "forum" && <ForumTab />}
 
-        {/* LANÇAR */}
         {tab === "forum" && (
           <div className="mt-8 pt-8 border-t border-white/[0.06]">
             <SectionHeader icon={<Upload className="size-3.5" />} title="Lançar Música" />
@@ -1440,7 +1431,6 @@ export default function PlayHomePage() {
         )}
       </main>
 
-      {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/90 backdrop-blur-xl border-t border-white/[0.06]">
         <div className="flex items-stretch h-16">
           {TABS.map(({ id, label, icon: Icon }) => (
