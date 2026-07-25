@@ -23,6 +23,14 @@ export type PlayItem = {
    * Ex: audioSrc = "tg:BQACAgIAAxk..."
    */
   audioSrc: string
+  /**
+   * URL de vídeo opcional.
+   * Aceita: https://api.telegram.org/file/bot<TOKEN>/<path> (mp4 nativo)
+   *       | https://youtu.be/... | https://youtube.com/watch?v=...
+   *       | https://drive.google.com/file/d/<id>/view
+   * Quando presente, o MiniPlayer exibe o botão 🎬 para abrir o VideoPopup.
+   */
+  videoSrc?: string
   letra?: string
   categoria: 'musica' | 'musicvideo' | 'video'
 }
@@ -98,23 +106,63 @@ export function detectMediaType(audioSrc: string): MediaType {
   return 'drive'
 }
 
+/**
+ * Detecta o tipo de um videoSrc para o VideoPopup do MiniPlayer.
+ * Retorna 'native' para mp4/webm do Telegram ou URLs diretas de vídeo,
+ * 'youtube' para links do YouTube, 'drive' para Google Drive.
+ */
+export type VideoSrcType = 'native' | 'youtube' | 'drive'
+
+export function detectVideoSrcType(videoSrc: string): VideoSrcType {
+  if (!videoSrc) return 'native'
+  const s = videoSrc.trim()
+  if (
+    s.includes('api.telegram.org/file') ||
+    s.endsWith('.mp4') ||
+    s.endsWith('.webm') ||
+    s.endsWith('.ogg')
+  ) return 'native'
+  if (s.includes('youtube.com') || s.includes('youtu.be')) return 'youtube'
+  if (s.includes('drive.google.com')) return 'drive'
+  return 'native'
+}
+
+/**
+ * Converte um videoSrc de qualquer tipo em uma URL embedável.
+ * - YouTube  → https://www.youtube-nocookie.com/embed/<id>?autoplay=1
+ * - Drive    → https://drive.google.com/file/d/<id>/preview
+ * - Native   → retorna a URL sem modificação
+ */
+export function resolveVideoEmbedUrl(videoSrc: string): string {
+  const type = detectVideoSrcType(videoSrc)
+  if (type === 'youtube') {
+    const id = extractYouTubeId(videoSrc)
+    return id
+      ? `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1`
+      : videoSrc
+  }
+  if (type === 'drive') {
+    const id = extractDriveId(videoSrc)
+    return id
+      ? `https://drive.google.com/file/d/${id}/preview`
+      : videoSrc
+  }
+  return videoSrc
+}
+
 export function driveStreamUrl(idOrUrl: string): string {
   const id = extractDriveId(idOrUrl) ?? idOrUrl
   return `https://empire-media-api.empirerpg-forum.workers.dev/?id=${id}`
 }
 
 /**
- * Resolve a URL de stream para qualquer tipo de mídia.
- * Use esta função no MiniPlayer em vez de chamar cada helper diretamente.
- *
- * Garante que audioSrc com prefixo 'tg:' seja sempre resolvido via
- * telegramStreamUrl (que já faz o strip do prefixo internamente).
+ * Resolve a URL de stream para qualquer tipo de mídia de áudio.
+ * Use no MiniPlayer em vez de chamar cada helper diretamente.
  */
 export function resolveStreamUrl(audioSrc: string): string {
   const type = detectMediaType(audioSrc)
-  if (type === 'telegram') return telegramStreamUrl(audioSrc) // telegramStreamUrl já strip 'tg:'
+  if (type === 'telegram') return telegramStreamUrl(audioSrc)
   if (type === 'drive')    return driveStreamUrl(audioSrc)
-  // YouTube não usa <audio> — é controlado via ytPlayerRef
   return audioSrc
 }
 
