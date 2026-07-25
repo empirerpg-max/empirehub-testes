@@ -1,92 +1,84 @@
 // ============================================================
-// TELEGRAM BOT — Upload e Recuperação de Mídia
-// ============================================================
-// Este serviço se comunica com a API intermediária (api/server.js)
-// que roda localmente ou em produção. A API intermediária é
-// necessária pois o BOT_TOKEN não deve ficar exposto no frontend.
+// telegramBot.ts
+// Upload de arquivos via Telegram Bot API
+//
+// BOT_TOKEN deve ser definido em .env:
+//   VITE_TELEGRAM_BOT_TOKEN=123456:ABCdef...
+//   VITE_TELEGRAM_CHAT_ID=-100xxxxxxxxxx  (ID do canal/grupo)
 //
 // Fluxo:
-//   Frontend → POST /api/upload (FormData com arquivo)
-//   API Intermediária → Telegram Bot API (sendDocument/sendVideo/sendAudio)
-//   Telegram retorna file_id permanente
-//   API Intermediária retorna { file_id, file_url } para o frontend
-//   Frontend salva file_id no Google Sheets
+//   1. sendDocument / sendAudio / sendVideo para o chat de armazenamento
+//   2. Retorna file_id (permanente) + URL temporária via getFile
+//   3. file_id é salvo no Sheets — URL pode ser renovada a qualquer momento
+// ============================================================
+import type { MediaType, TelegramUploadResult } from '../types';
 
-const API_BASE = import.meta.env.VITE_TELEGRAM_API_BASE ?? 'http://localhost:3001';
+const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN as string;
+const CHAT_ID   = import.meta.env.VITE_TELEGRAM_CHAT_ID   as string;
+const TG_API    = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-export type TelegramMediaType = 'audio' | 'video' | 'document';
-
-export interface TelegramUploadResult {
-  file_id: string;
-  file_url: string;
-  file_size: number;
-  mime_type: string;
+if ((!BOT_TOKEN || !CHAT_ID) && import.meta.env.DEV) {
+  console.warn('[telegramBot] VITE_TELEGRAM_BOT_TOKEN ou VITE_TELEGRAM_CHAT_ID não definidos.');
 }
 
-export interface TelegramFileInfo {
-  file_id: string;
-  file_path: string;
-  file_url: string;
-  file_size: number;
+// ─── Método do Telegram por tipo de mídia ────────────────────────────────────
+function getTgMethod(tipo: MediaType): string {
+  switch (tipo) {
+    case 'music': return 'sendAudio';
+    case 'album': return 'sendAudio';
+    case 'clip':  return 'sendVideo';
+    case 'video': return 'sendVideo';
+    default:      return 'sendDocument';
+  }
 }
 
-/**
- * Faz upload de um arquivo para o Telegram via API intermediária.
- * O backend envia ao canal privado e retorna o file_id permanente.
- */
+// ─── Upload de arquivo ────────────────────────────────────────────────────────
 export async function uploadToTelegram(
   file: File,
-  mediaType: TelegramMediaType,
+  tipo: MediaType,
   caption?: string
 ): Promise<TelegramUploadResult> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('media_type', mediaType);
-  if (caption) formData.append('caption', caption);
+  const method  = getTgMethod(tipo);
+  const fieldKey = method === 'sendAudio' ? 'audio' : method === 'sendVideo' ? 'video' : 'document';
 
-  const response = await fetch(`${API_BASE}/api/upload`, {
-    method: 'POST',
-    body: formData,
-  });
+  const form = new FormData();
+  form.append('chat_id', CHAT_ID);
+  form.append(fieldKey, file, file.name);
+  if (caption) form.append('caption', caption);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-    throw new Error(error.message ?? `Upload falhou: ${response.status}`);
-  }
+  const res = await fetch(`${TG_API}/${method}`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`Telegram upload erro: ${res.status}`);
+  const json = await res.json();
 
-  return response.json() as Promise<TelegramUploadResult>;
+  if (!json.ok) throw new Error(json.description || 'Erro no Telegram Bot API');
+
+  // Extrai o file_id do resultado
+  const msg = json.result;
+  const mediaObj = msg.audio || msg.video || msg.document;
+  if (!mediaObj) throw new Error('Telegram não retornou objeto de mídia');
+
+  const file_id = mediaObj.file_id as string;
+  const file_url = await getTelegramFileUrl(file_id);
+
+  return {
+    file_id,
+    file_unique_id: mediaObj.file_unique_id as string,
+    file_url,
+    file_size: mediaObj.file_size as number | undefined,
+  };
 }
 
-/**
- * Busca a URL temporária de reprodução a partir de um file_id do Telegram.
- * A URL expira, mas o file_id é permanente — pode ser chamado novamente.
- */
-export async function getTelegramFileUrl(
-  fileId: string
-): Promise<TelegramFileInfo> {
-  const response = await fetch(
-    `${API_BASE}/api/file/${encodeURIComponent(fileId)}`
-  );
-
-  if (!response.ok) {
-    throw new Error(`Não foi possível obter URL do arquivo: ${response.status}`);
-  }
-
-  return response.json() as Promise<TelegramFileInfo>;
+// ─── Gerar URL temporária de reprodução a partir do file_id ──────────────────
+export async function getTelegramFileUrl(file_id: string): Promise<string> {
+  const res  = await fetch(`${TG_API}/getFile?file_id=${encodeURIComponent(file_id)}`);
+  if (!res.ok) throw new Error(`Telegram getFile erro: ${res.status}`);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.description || 'Erro ao obter URL do Telegram');
+  return `https://api.telegram.org/file/bot${BOT_TOKEN}/${json.result.file_path}`;
 }
 
-/**
- * Detecta o TelegramMediaType correto baseado no tipo MIME do arquivo.
- */
-export function detectMediaType(file: File): TelegramMediaType {
-  if (file.type.startsWith('audio/')) return 'audio';
-  if (file.type.startsWith('video/')) return 'video';
-  return 'document';
-}
-
-/**
- * Verifica se um file_id parece válido (formato Telegram).
- */
-export function isValidTelegramFileId(fileId: string): boolean {
-  return typeof fileId === 'string' && fileId.length > 10;
+// ─── Renovar URL de um file_id já salvo no Sheets ────────────────────────────
+// Use quando a URL expirou e precisa gerar uma nova para o player
+export async function renewTelegramUrl(file_id: string): Promise<string> {
+  return getTelegramFileUrl(file_id);
 }

@@ -1,187 +1,113 @@
 // ============================================================
-// GOOGLE SHEETS API — Leitura e escrita das abas do Empire Play
-// ============================================================
-// Usa a Google Sheets API v4 pública (apenas leitura com API Key)
-// Para escrita, usa o endpoint da API intermediária (via service account).
+// sheetsAPI.ts
+// Comunicação com o GAS Empire Hub (registros2-2.txt)
 //
-// Mapeamento de abas:
-//   Musicas-10        → músicas
-//   Albuns-4          → álbuns
-//   Music-Videos-8    → clipes
-//   Videos-6          → vídeos
-//   Comentarios_Musicas-9   → comentários de músicas
-//   Comentarios_Albuns-3    → comentários de álbuns
-//   Comentarios_MV-7        → comentários de clipes
-//   Comentarios_Videos-5    → comentários de vídeos
+// SHEET_ID: 1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo
+//
+// GAS_URL deve ser definido em .env:
+//   VITE_GAS_URL=https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec
+// ============================================================
+import type { GASConteudoItem, GASComentario, MediaType } from '../types';
+import { GAS_CATEGORIA } from '../types';
 
-import type { MusicItem, AlbumItem, VideoItem, ForumComment, MediaType } from '../types';
-import { isDriveUrl, driveToStreamUrl, driveToImageUrl } from './googleDrive';
-import { isYoutubeUrl, parseYoutubeUrl } from './youtubeEmbed';
-import { isValidTelegramFileId } from './telegramBot';
+const GAS_URL = import.meta.env.VITE_GAS_URL as string;
 
-const API_BASE = import.meta.env.VITE_TELEGRAM_API_BASE ?? 'http://localhost:3001';
-
-// ---- Helpers de normalização ----
-
-/**
- * Detecta a source de uma URL de mídia.
- */
-function detectSource(url: string): 'youtube' | 'drive' | 'telegram' {
-  if (isYoutubeUrl(url)) return 'youtube';
-  if (isDriveUrl(url)) return 'drive';
-  if (isValidTelegramFileId(url)) return 'telegram';
-  return 'drive'; // fallback
+if (!GAS_URL && import.meta.env.DEV) {
+  console.warn('[sheetsAPI] VITE_GAS_URL não definido. Configure em .env');
 }
 
-/**
- * Resolve a URL de áudio para reprodução direta.
- */
-function resolveAudioUrl(raw: string): string {
-  if (isDriveUrl(raw)) return driveToStreamUrl(raw) ?? raw;
-  return raw;
+// ─── GET: busca conteúdo (músicas / clips / vídeos) ─────────────────────────
+export async function fetchConteudo(tipo: MediaType): Promise<GASConteudoItem[]> {
+  const categoria = GAS_CATEGORIA[tipo];
+  const url = `${GAS_URL}?action=conteudo&categoria=${categoria}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GAS fetchConteudo erro: ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return (json.data as GASConteudoItem[]) || [];
 }
 
-/**
- * Resolve a URL de capa/thumbnail.
- */
-function resolveCoverUrl(raw: string): string {
-  if (isDriveUrl(raw)) return driveToImageUrl(raw) ?? raw;
-  if (isYoutubeUrl(raw)) {
-    const parsed = parseYoutubeUrl(raw);
-    return parsed?.thumbnailUrl ?? raw;
-  }
-  return raw;
+// ─── GET: busca comentários de um tópico ────────────────────────────────────
+export async function fetchComentarios(
+  tipo: MediaType,
+  idTopico: string
+): Promise<GASComentario[]> {
+  const categoria = GAS_CATEGORIA[tipo];
+  const url = `${GAS_URL}?action=comentarios&categoria=${categoria}&idTopico=${encodeURIComponent(idTopico)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GAS fetchComentarios erro: ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return (json.data as GASComentario[]) || [];
 }
 
-// ---- Parsers das linhas do Sheets ----
-
-/**
- * Converte uma linha bruta do CSV/Sheets de Músicas em MusicItem.
- * Colunas esperadas (baseadas no arquivo Musicas-10.csv):
- *   Data de lançamento, ID, URL, Capa, Letra, ID_Forum, ID Criador,
- *   Nome, Tipo de lançamento, Tipo, Album, Artista1, Artista2, ..., Gênero
- */
-export function parseMusicRow(row: Record<string, string>): MusicItem {
-  const rawUrl = row['URL'] ?? row['url'] ?? '';
-  const rawCover = row['Capa'] ?? row['capa'] ?? '';
-  return {
-    id: parseInt(row['ID'] ?? row['id'] ?? '0', 10),
-    title: row['Nome'] ?? row['nome'] ?? '',
-    artist: row['Artista1'] ?? row['artista'] ?? '',
-    releaseDate: row['Data de lançamento'] || undefined,
-    releaseType: (row['Tipo de lançamento'] as MusicItem['releaseType']) || undefined,
-    albumName: row['Album'] || undefined,
-    coverUrl: rawCover ? resolveCoverUrl(rawCover) : undefined,
-    audioUrl: resolveAudioUrl(rawUrl),
-    source: detectSource(rawUrl),
-    lyrics: row['Letra'] || undefined,
-    genre: (row['Gênero'] as MusicItem['genre']) || undefined,
-    topicId: row['ID_Forum'] ? parseInt(row['ID_Forum'], 10) : undefined,
-    creatorId: row['ID Criador'] ? parseInt(row['ID Criador'], 10) : undefined,
-    creatorName: row['Nome do criador'] || undefined,
+// ─── POST: adiciona comentário ───────────────────────────────────────────────
+export async function postComentario(params: {
+  tipo: MediaType;
+  idTopico: string;
+  idJogador: string;
+  nomeJogador: string;
+  comentario: string;
+}): Promise<void> {
+  const categoria = GAS_CATEGORIA[params.tipo];
+  const body = {
+    action: 'novoComentario',
+    categoria,
+    idTopico:    params.idTopico,
+    idJogador:   params.idJogador,
+    nomeJogador: params.nomeJogador,
+    comentario:  params.comentario,
   };
-}
-
-/**
- * Converte uma linha bruta de Álbuns em AlbumItem.
- */
-export function parseAlbumRow(row: Record<string, string>): AlbumItem {
-  return {
-    id: parseInt(row['ID do tópico'] ?? '0', 10),
-    name: row['Nome'] ?? '',
-    artist: (row['Nome do criador'] ?? '').split(' - ')[0] ?? '',
-    coverUrl: row['Capa'] ? resolveCoverUrl(row['Capa']) : undefined,
-    releaseDate: row['Data de lançamento'] || undefined,
-    topicId: row['ID do tópico'] ? parseInt(row['ID do tópico'], 10) : undefined,
-    creatorId: row['ID do Criador'] ? parseInt(row['ID do Criador'], 10) : undefined,
-    creatorName: row['Nome do criador'] || undefined,
-  };
-}
-
-/**
- * Converte uma linha bruta de Music Videos/Videos em VideoItem.
- */
-export function parseVideoRow(
-  row: Record<string, string>,
-  mediaType: MediaType = 'clipe'
-): VideoItem {
-  const rawUrl = row['URL'] ?? row['url'] ?? row['ID do arquivo'] ?? '';
-  const rawCover = row['Thumb'] ?? row['Capa'] ?? row['thumb'] ?? '';
-  return {
-    id: parseInt(row['ID do tópico'] ?? row['ID'] ?? '0', 10),
-    title: row['Nome'] ?? '',
-    artist: (row['Nome'] ?? '').split(' - ')[0] ?? '',
-    releaseDate: row['Data de lançamento'] || undefined,
-    type: mediaType,
-    videoType: (row['Tipo'] as VideoItem['videoType']) ?? 'Oficial',
-    coverUrl: rawCover ? resolveCoverUrl(rawCover) : undefined,
-    videoUrl: rawUrl,
-    source: detectSource(rawUrl),
-    topicId: row['ID do tópico'] ? parseInt(row['ID do tópico'], 10) : undefined,
-    creatorId: row['ID do Criador'] ? parseInt(row['ID do Criador'], 10) : undefined,
-    creatorName: row['Nome do criador'] || undefined,
-  };
-}
-
-// ---- Fetchers (via API intermediária) ----
-
-/**
- * Busca todas as músicas da aba Musicas-10.
- */
-export async function fetchMusicas(): Promise<MusicItem[]> {
-  const res = await fetch(`${API_BASE}/api/sheets/musicas`);
-  if (!res.ok) throw new Error('Erro ao buscar músicas');
-  const rows: Record<string, string>[] = await res.json();
-  return rows.map(parseMusicRow);
-}
-
-/**
- * Busca todos os álbuns da aba Albuns-4.
- */
-export async function fetchAlbuns(): Promise<AlbumItem[]> {
-  const res = await fetch(`${API_BASE}/api/sheets/albuns`);
-  if (!res.ok) throw new Error('Erro ao buscar álbuns');
-  const rows: Record<string, string>[] = await res.json();
-  return rows.map(parseAlbumRow);
-}
-
-/**
- * Busca todos os clipes da aba Music-Videos-8.
- */
-export async function fetchClipes(): Promise<VideoItem[]> {
-  const res = await fetch(`${API_BASE}/api/sheets/clipes`);
-  if (!res.ok) throw new Error('Erro ao buscar clipes');
-  const rows: Record<string, string>[] = await res.json();
-  return rows.map((r) => parseVideoRow(r, 'clipe'));
-}
-
-/**
- * Busca os comentários de um tópico específico.
- */
-export async function fetchComments(
-  topicId: number,
-  mediaType: MediaType
-): Promise<ForumComment[]> {
-  const res = await fetch(
-    `${API_BASE}/api/sheets/comentarios?topicId=${topicId}&type=${mediaType}`
-  );
-  if (!res.ok) throw new Error('Erro ao buscar comentários');
-  return res.json() as Promise<ForumComment[]>;
-}
-
-/**
- * Adiciona uma nova linha ao Sheets (música, álbum, vídeo ou clipe).
- * Requer a API intermediária com service account configurado.
- */
-export async function appendToSheets(
-  mediaType: MediaType,
-  data: Record<string, string | number>
-): Promise<{ success: boolean; rowIndex: number }> {
-  const res = await fetch(`${API_BASE}/api/sheets/append`, {
+  const res = await fetch(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mediaType, data }),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Erro ao salvar no Sheets');
-  return res.json();
+  if (!res.ok) throw new Error(`GAS postComentario erro: ${res.status}`);
+  const json = await res.json();
+  if (json.status !== 'success') throw new Error(json.message || 'Erro ao salvar comentário');
 }
+
+// ─── POST: grava novo conteúdo (gravarMusica / gravarAlbum / gravarVideo) ────
+// O GAS ainda não tem esse handler — esta função prepara o payload
+// e envia quando o doPost for atualizado (ver GAS_WRITE_GUIDE abaixo)
+export async function submitToGAS(
+  action: 'gravarMusica' | 'gravarAlbum' | 'gravarVideo',
+  payload: Record<string, unknown>
+): Promise<{ threadId?: string; status?: string }> {
+  const body = { action, ...payload };
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`GAS submitToGAS erro: ${res.status}`);
+  const json = await res.json();
+  if (json.status === 'error') throw new Error(json.message || 'Erro no GAS');
+  return json;
+}
+
+// ─── GAS_WRITE_GUIDE ─────────────────────────────────────────────────────────
+// Adicione no doPost do GAS (registros2-2.txt), dentro do if-chain:
+//
+// if (data.action === 'gravarMusica') {
+//   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Musicas');
+//   const threadId = data.threadId || String(Date.now());
+//   sheet.appendRow([
+//     threadId, data.titulo, data.artistas?.join(', '),
+//     data.tipoSingle, data.tipoMusica, data.genero,
+//     data.dataLancamento, data.capaUrl, data.audioUrl,
+//     data.source, data.telegramFileId, data.letra,
+//     data.idCriador, data.nomeCriador, new Date().toISOString()
+//   ]);
+//   return ok({ threadId });
+// }
+//
+// if (data.action === 'gravarAlbum') { ... }
+// if (data.action === 'gravarVideo') { ... }
+//
+// Função helper ok:
+// function ok(data) {
+//   return ContentService.createTextOutput(JSON.stringify({ status:'success', ...data }))
+//     .setMimeType(ContentService.MimeType.JSON);
+// }

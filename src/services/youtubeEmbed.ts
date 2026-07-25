@@ -1,95 +1,46 @@
 // ============================================================
-// YOUTUBE — Parser e Embed
+// youtubeEmbed.ts
+// Parse e embed de URLs do YouTube
+// Usa youtube-nocookie.com para maior privacidade
 // ============================================================
+import type { YoutubeParseResult } from '../types';
 
-/**
- * Extrai o VIDEO_ID de qualquer formato de URL do YouTube.
- * Suporta:
- *   https://www.youtube.com/watch?v=VIDEO_ID
- *   https://youtu.be/VIDEO_ID
- *   https://www.youtube.com/embed/VIDEO_ID
- *   https://www.youtube.com/shorts/VIDEO_ID
- *   https://music.youtube.com/watch?v=VIDEO_ID
- */
-export function extractYoutubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
+// Regex cobre:
+//   youtube.com/watch?v=ID
+//   youtube.com/watch?v=ID&list=...
+//   youtu.be/ID
+//   youtube.com/shorts/ID
+//   youtube.com/embed/ID
+//   m.youtube.com/watch?v=ID
+const YT_REGEX =
+  /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 
-/**
- * Gera a URL de embed do YouTube (sem cookies, com controles customizáveis).
- * Usa youtube-nocookie.com para privacidade.
- */
-export function youtubeEmbedUrl(
-  videoId: string,
-  options: {
-    autoplay?: boolean;
-    startAt?: number;     // segundos
-    loop?: boolean;
-    controls?: boolean;
-    mute?: boolean;
-  } = {}
-): string {
-  const params = new URLSearchParams();
-  params.set('rel', '0');           // sem vídeos relacionados de outros canais
-  params.set('modestbranding', '1'); // logo do YouTube menor
-  params.set('enablejsapi', '1');   // habilita YouTube IFrame API
-  if (options.autoplay) params.set('autoplay', '1');
-  if (options.startAt) params.set('start', String(options.startAt));
-  if (options.loop) {
-    params.set('loop', '1');
-    params.set('playlist', videoId); // loop requer playlist
-  }
-  if (options.controls === false) params.set('controls', '0');
-  if (options.mute) params.set('mute', '1');
-
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
-}
-
-/**
- * Gera a URL da thumbnail do YouTube.
- * Qualidade: maxresdefault > hqdefault > mqdefault > default
- */
-export function youtubeThumbnailUrl(
-  videoId: string,
-  quality: 'max' | 'hq' | 'mq' | 'default' = 'hq'
-): string {
-  const qualityMap = {
-    max: 'maxresdefault',
-    hq: 'hqdefault',
-    mq: 'mqdefault',
-    default: 'default',
-  };
-  return `https://img.youtube.com/vi/${videoId}/${qualityMap[quality]}.jpg`;
-}
-
-/**
- * Detecta se uma URL é do YouTube.
- */
 export function isYoutubeUrl(url: string): boolean {
-  return /youtube\.com|youtu\.be/.test(url);
+  return YT_REGEX.test(url);
 }
 
-/**
- * Recebe qualquer URL do YouTube e retorna objeto com id + embed + thumbnail.
- * Retorna null se a URL não for válida.
- */
-export function parseYoutubeUrl(url: string): {
-  id: string;
-  embedUrl: string;
-  thumbnailUrl: string;
-} | null {
-  const id = extractYoutubeId(url);
-  if (!id) return null;
+export function parseYoutubeUrl(url: string): YoutubeParseResult | null {
+  const match = url.match(YT_REGEX);
+  if (!match) return null;
+  const videoId = match[1];
   return {
-    id,
-    embedUrl: youtubeEmbedUrl(id),
-    thumbnailUrl: youtubeThumbnailUrl(id, 'hq'),
+    videoId,
+    embedUrl:     `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`,
+    thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    watchUrl:     `https://www.youtube.com/watch?v=${videoId}`,
   };
+}
+
+// Retorna o <iframe> embed pronto pra usar no VideoPlayer
+export function getYoutubeIframeSrc(url: string): string | null {
+  const parsed = parseYoutubeUrl(url);
+  return parsed ? parsed.embedUrl : null;
+}
+
+// Thumbnail com fallback (maxresdefault pode não existir para vídeos antigos)
+export function getYoutubeThumbnail(url: string, quality: 'max' | 'hq' | 'mq' = 'max'): string | null {
+  const parsed = parseYoutubeUrl(url);
+  if (!parsed) return null;
+  const qMap = { max: 'maxresdefault', hq: 'hqdefault', mq: 'mqdefault' };
+  return `https://i.ytimg.com/vi/${parsed.videoId}/${qMap[quality]}.jpg`;
 }
