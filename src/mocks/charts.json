@@ -1,39 +1,39 @@
 [
   {
-    "aba": "Top_50_Spotify",
     "nome": "Spotify",
     "subtitulo": "Top 100 Global Spotify",
-    "icone": "🟢",
+    "icone": "\uD83D\uDFE2",
     "cor": "text-green-400",
+    "capaDaPlaylist": "",
     "entries": [
-      { "posicao": 1, "titulo": "Neon Empire", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
-      { "posicao": 2, "titulo": "Golden Rush", "capa": "", "audioSrc": "L_jWHffIx5E", "artista": "MaxVibe" },
-      { "posicao": 3, "titulo": "Crown Protocol", "capa": "", "audioSrc": "fJ9rUzIMcZQ", "artista": "DJ Crown" },
-      { "posicao": 4, "titulo": "Rise Again", "capa": "", "audioSrc": "kJQP7kiw5Fk", "artista": "Lana Empire" },
-      { "posicao": 5, "titulo": "Dark Throne", "capa": "", "audioSrc": "YQHsXMglC9A", "artista": "MaxVibe" }
+      { "posicao": 1, "titulo": "Neon Empire",    "capa": "" },
+      { "posicao": 2, "titulo": "Golden Rush",    "capa": "" },
+      { "posicao": 3, "titulo": "Crown Protocol", "capa": "" },
+      { "posicao": 4, "titulo": "Rise Again",     "capa": "" },
+      { "posicao": 5, "titulo": "Dark Throne",    "capa": "" }
     ]
   },
   {
-    "aba": "Top_Songs_Apple_Music",
     "nome": "Apple Music",
     "subtitulo": "Top Songs Apple Music",
-    "icone": "🎵",
+    "icone": "\uD83C\uDFB5",
     "cor": "text-red-400",
+    "capaDaPlaylist": "",
     "entries": [
-      { "posicao": 1, "titulo": "Dark Throne", "capa": "", "audioSrc": "YQHsXMglC9A", "artista": "MaxVibe" },
-      { "posicao": 2, "titulo": "Neon Empire", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
-      { "posicao": 3, "titulo": "Rise Again", "capa": "", "audioSrc": "kJQP7kiw5Fk", "artista": "Lana Empire" }
+      { "posicao": 1, "titulo": "Dark Throne",  "capa": "" },
+      { "posicao": 2, "titulo": "Neon Empire",  "capa": "" },
+      { "posicao": 3, "titulo": "Rise Again",   "capa": "" }
     ]
   },
   {
-    "aba": "Top_Videos_YT",
     "nome": "YouTube",
     "subtitulo": "Top Videos",
-    "icone": "📹",
+    "icone": "\uD83D\uDCF9",
     "cor": "text-red-500",
+    "capaDaPlaylist": "",
     "entries": [
-      { "posicao": 1, "titulo": "Neon Empire (Official Video)", "capa": "", "audioSrc": "dQw4w9WgXcQ", "artista": "Lana Empire" },
-      { "posicao": 2, "titulo": "Golden Rush (Lyric Video)", "capa": "", "audioSrc": "L_jWHffIx5E", "artista": "MaxVibe" }
+      { "posicao": 1, "titulo": "Neon Empire (Official Video)", "capa": "" },
+      { "posicao": 2, "titulo": "Golden Rush (Lyric Video)",    "capa": "" }
     ]
   }
 ]
