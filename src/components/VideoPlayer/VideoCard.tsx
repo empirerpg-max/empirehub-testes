@@ -1,7 +1,7 @@
 // ============================================================
 // VideoCard — Card de vídeo/clipe na listagem
 // ============================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { VideoItem } from '../../types';
 import { VideoPlayer } from './VideoPlayer';
 import { parseYoutubeUrl, isYoutubeUrl } from '../../services/youtubeEmbed';
@@ -39,11 +39,83 @@ function typeLabel(video: VideoItem): string {
   return map[video.videoType ?? ''] ?? video.type.toUpperCase();
 }
 
+// Trava/libera scroll do body quando modal abre/fecha
+function useBodyScrollLock(active: boolean) {
+  useEffect(() => {
+    if (active) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [active]);
+}
+
+// Modal reutilizável
+function VideoModal({ video, onClose }: { video: VideoItem; onClose: () => void }) {
+  useBodyScrollLock(true);
+
+  // fecha com Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4"
+      style={{
+        zIndex: 9999,
+        background: 'oklch(0 0 0 / 90%)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Reproduzindo: ${video.title}`}
+    >
+      <div
+        className="w-full"
+        style={{ maxWidth: '56rem' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Cabeçalho do modal */}
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold truncate" style={{ color: 'white' }}>{video.title}</p>
+            <p className="text-sm" style={{ color: 'oklch(1 0 0 / 55%)' }}>
+              {video.creatorName ?? video.artist}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Fechar player"
+            className="flex-shrink-0 p-2 rounded-full transition-colors"
+            style={{ background: 'oklch(1 0 0 / 12%)', color: 'white' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <VideoPlayer video={video} autoPlay onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
 export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const thumbnail = resolveThumbnail(video);
   const isYT = isYoutubeUrl(video.videoUrl);
   const isDrive = isDriveUrl(video.videoUrl);
+
+  const open = () => setIsOpen(true);
+  const close = () => setIsOpen(false);
 
   if (layout === 'list') {
     return (
@@ -51,27 +123,31 @@ export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
         <div
           className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer group transition-colors"
           style={{ background: 'transparent' }}
-          onClick={() => setIsOpen(true)}
-          role="button" tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && setIsOpen(true)}
+          onClick={open}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && open()}
           aria-label={`Assistir ${video.title}`}
         >
           {/* Thumb */}
-          <div className="relative flex-shrink-0 rounded-lg overflow-hidden"
-            style={{ width: 80, height: 48, background: 'var(--secondary)' }}>
+          <div
+            className="relative flex-shrink-0 rounded-lg overflow-hidden"
+            style={{ width: 80, height: 48, background: 'var(--secondary)' }}
+          >
             {thumbnail ? (
-              <img src={thumbnail} alt={video.title}
-                width={80} height={48}
-                className="w-full h-full object-cover"
-                loading="lazy" />
+              <img src={thumbnail} alt={video.title} width={80} height={48}
+                className="w-full h-full object-cover" loading="lazy" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xl">🎬</div>
             )}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ background: 'oklch(0 0 0 / 50%)' }}>
-              <span style={{ color: 'var(--primary)' }}><PlayIcon /></span>
+            <div
+              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: 'oklch(0 0 0 / 50%)' }}
+            >
+              <span style={{ color: 'var(--primary, #4f98a3)' }}><PlayIcon /></span>
             </div>
           </div>
+
           {/* Info */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{video.title}</p>
@@ -80,22 +156,17 @@ export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
               {video.releaseDate && ` • ${video.releaseDate}`}
             </p>
           </div>
+
           {/* Badge */}
-          <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
-            style={{ background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+            style={{ background: 'var(--secondary)', color: 'var(--muted-foreground)' }}
+          >
             {typeLabel(video)}
           </span>
         </div>
 
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'oklch(0 0 0 / 85%)' }}
-            onClick={() => setIsOpen(false)}>
-            <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
-              <VideoPlayer video={video} autoPlay onClose={() => setIsOpen(false)} />
-            </div>
-          </div>
-        )}
+        {isOpen && <VideoModal video={video} onClose={close} />}
       </>
     );
   }
@@ -106,9 +177,10 @@ export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
       <div
         className="group cursor-pointer rounded-2xl overflow-hidden transition-transform hover:-translate-y-1"
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
-        onClick={() => setIsOpen(true)}
-        role="button" tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && setIsOpen(true)}
+        onClick={open}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && open()}
         aria-label={`Assistir ${video.title}`}
       >
         {/* Thumbnail */}
@@ -125,43 +197,47 @@ export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
           )}
 
           {/* Overlay play */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
-            style={{ background: 'oklch(0 0 0 / 50%)' }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center"
+          <div
+            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+            style={{ background: 'oklch(0 0 0 / 50%)' }}
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
               style={{
                 background: 'oklch(0 0 0 / 60%)',
-                border: '2px solid var(--primary)',
-                color: 'var(--primary)',
-                boxShadow: '0 0 20px var(--primary)',
-              }}>
+                border: '2px solid var(--primary, #4f98a3)',
+                color: 'var(--primary, #4f98a3)',
+                boxShadow: '0 0 20px var(--primary, #4f98a3)',
+              }}
+            >
               <PlayIcon />
             </div>
           </div>
 
           {/* Badges */}
           <div className="absolute top-2 left-2 flex gap-1">
-            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{ background: 'oklch(0 0 0 / 75%)', color: 'var(--primary)' }}>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ background: 'oklch(0 0 0 / 75%)', color: 'var(--primary, #4f98a3)' }}
+            >
               {typeLabel(video)}
             </span>
             {isYT && (
               <span className="text-xs px-2 py-0.5 rounded-full"
-                style={{ background: 'oklch(0 0 0 / 75%)', color: 'white' }}>
-                YT
-              </span>
+                style={{ background: 'oklch(0 0 0 / 75%)', color: 'white' }}>YT</span>
             )}
             {isDrive && (
               <span className="text-xs px-2 py-0.5 rounded-full"
-                style={{ background: 'oklch(0 0 0 / 75%)', color: 'white' }}>
-                Drive
-              </span>
+                style={{ background: 'oklch(0 0 0 / 75%)', color: 'white' }}>Drive</span>
             )}
           </div>
 
           {/* Duração */}
           {video.duration && (
-            <span className="absolute bottom-2 right-2 text-xs tabular-nums px-1.5 py-0.5 rounded"
-              style={{ background: 'oklch(0 0 0 / 80%)', color: 'white' }}>
+            <span
+              className="absolute bottom-2 right-2 text-xs tabular-nums px-1.5 py-0.5 rounded"
+              style={{ background: 'oklch(0 0 0 / 80%)', color: 'white' }}
+            >
               {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
             </span>
           )}
@@ -181,27 +257,7 @@ export function VideoCard({ video, layout = 'grid' }: VideoCardProps) {
         </div>
       </div>
 
-      {/* Modal lightbox */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'oklch(0 0 0 / 90%)' }}
-          onClick={() => setIsOpen(false)}
-        >
-          <div className="w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
-            {/* Título acima do player */}
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div>
-                <p className="font-semibold" style={{ color: 'white' }}>{video.title}</p>
-                <p className="text-sm" style={{ color: 'oklch(1 0 0 / 60%)' }}>
-                  {video.creatorName ?? video.artist}
-                </p>
-              </div>
-            </div>
-            <VideoPlayer video={video} autoPlay onClose={() => setIsOpen(false)} />
-          </div>
-        </div>
-      )}
+      {isOpen && <VideoModal video={video} onClose={close} />}
     </>
   );
 }

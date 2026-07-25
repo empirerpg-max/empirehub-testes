@@ -49,44 +49,49 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Resolve a URL dependendo da fonte ───────────────────────────────────
+  // ─── Resolve URL conforme a fonte ────────────────────────────────────────
   useEffect(() => {
     setIsLoading(true);
     setError(null);
     setResolvedUrl('');
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setShowControls(true);
 
     async function resolve() {
       try {
         const url = video.videoUrl ?? '';
 
-        // 1. YouTube
         if (video.source === 'youtube' || isYoutubeUrl(url)) {
           const parsed = parseYoutubeUrl(url);
           if (!parsed) throw new Error('URL do YouTube inválida');
           setResolvedUrl(parsed.embedUrl + (autoPlay ? '&autoplay=1' : ''));
           setMode('iframe');
 
-        // 2. Google Drive
         } else if (video.source === 'drive' || isDriveUrl(url)) {
           const embed = driveToEmbedUrl(url);
           if (!embed) throw new Error('URL do Drive inválida');
           setResolvedUrl(embed);
           setMode('iframe');
 
-        // 3. Telegram (via file_id)
         } else if (video.source === 'telegram') {
-          if (!video.telegramFileId) throw new Error('telegram_file_id ausente para este vídeo.');
+          if (!video.telegramFileId) {
+            throw new Error(
+              'Este vídeo ainda não tem o file_id do Telegram preenchido.\n' +
+              'Execute o workflow "Sync Telegram Videos" no GitHub Actions para gerar automaticamente.'
+            );
+          }
           const { file_url } = await getTelegramFileUrl(video.telegramFileId);
           setResolvedUrl(file_url);
           setMode('native');
 
-        // 4. URL direta (fallback)
         } else if (url) {
           setResolvedUrl(url);
           setMode('native');
 
         } else {
-          throw new Error('Nenhuma URL de vídeo disponível.');
+          throw new Error('Nenhuma URL de vídeo disponível para este item.');
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erro ao carregar vídeo');
@@ -101,15 +106,15 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
   // ─── Eventos do <video> nativo ───────────────────────────────────────────
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || mode !== 'native') return;
+    if (!v || mode !== 'native' || !resolvedUrl) return;
 
-    const onPlay        = () => setIsPlaying(true);
-    const onPause       = () => setIsPlaying(false);
-    const onTimeUpdate  = () => setCurrentTime(v.currentTime);
-    const onDuration    = () => setDuration(v.duration);
-    const onWaiting     = () => setIsLoading(true);
-    const onCanPlay     = () => setIsLoading(false);
-    const onError       = () => setError('Erro ao reproduzir vídeo.');
+    const onPlay         = () => { setIsPlaying(true); };
+    const onPause        = () => { setIsPlaying(false); setShowControls(true); };
+    const onTimeUpdate   = () => setCurrentTime(v.currentTime);
+    const onDuration     = () => setDuration(v.duration);
+    const onWaiting      = () => setIsLoading(true);
+    const onCanPlay      = () => { setIsLoading(false); };
+    const onError        = () => setError('Erro ao reproduzir o vídeo. Tente novamente.');
     const onVolumeChange = () => { setVolume(v.volume); setIsMuted(v.muted); };
 
     v.addEventListener('play', onPlay);
@@ -120,6 +125,9 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
     v.addEventListener('canplay', onCanPlay);
     v.addEventListener('error', onError);
     v.addEventListener('volumechange', onVolumeChange);
+
+    // define volume inicial
+    v.volume = volume;
 
     if (autoPlay) v.play().catch(() => {});
 
@@ -133,15 +141,25 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
       v.removeEventListener('error', onError);
       v.removeEventListener('volumechange', onVolumeChange);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, resolvedUrl, autoPlay]);
 
-  // ─── Auto-ocultar controles ──────────────────────────────────────────────
+  // ─── Auto-ocultar controles (só quando tocando) ──────────────────────────
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
+      setShowControls((prev) => {
+        // só oculta se estiver tocando
+        if (videoRef.current && !videoRef.current.paused) return false;
+        return prev;
+      });
     }, 3000);
+  }, []);
+
+  // controles sempre visíveis quando pausado
+  useEffect(() => {
+    if (!isPlaying) setShowControls(true);
   }, [isPlaying]);
 
   // ─── Fullscreen ──────────────────────────────────────────────────────────
@@ -183,6 +201,8 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
     const v = parseFloat(e.target.value);
     if (videoRef.current) videoRef.current.volume = v;
     setVolume(v);
+    if (videoRef.current) videoRef.current.muted = false;
+    setIsMuted(false);
   }
 
   function handleMute() {
@@ -190,6 +210,8 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
   }
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // controles visíveis: sempre quando pausado, ou quando showControls=true durante reprodução
+  const controlsVisible = showControls || !isPlaying;
 
   return (
     <div
@@ -213,24 +235,45 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
 
       {/* Loading */}
       {isLoading && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center"
-          style={{ background: 'oklch(0 0 0 / 70%)' }}>
-          <div className="w-10 h-10 border-2 rounded-full animate-spin"
-            style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }} />
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
+          style={{ background: 'oklch(0.05 0 0 / 90%)' }}
+        >
+          <div
+            className="w-10 h-10 border-2 rounded-full animate-spin"
+            style={{ borderColor: 'var(--primary, #4f98a3)', borderTopColor: 'transparent' }}
+          />
+          <p className="text-sm" style={{ color: 'oklch(0.7 0 0)' }}>Carregando vídeo…</p>
         </div>
       )}
 
       {/* Erro */}
-      {error && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center"
-          style={{ background: 'oklch(0.1 0 0)' }}>
-          <span style={{ fontSize: '2rem' }}>⚠️</span>
-          <p className="text-sm" style={{ color: 'oklch(0.7 0 0)' }}>{error}</p>
+      {error && !isLoading && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 p-6 text-center"
+          style={{ background: 'oklch(0.08 0 0)' }}
+        >
+          <span style={{ fontSize: '2.5rem' }}>⚠️</span>
+          <div>
+            <p className="text-sm font-semibold mb-1" style={{ color: 'white' }}>Não foi possível reproduzir</p>
+            {error.split('\n').map((line, i) => (
+              <p key={i} className="text-xs" style={{ color: 'oklch(0.6 0 0)' }}>{line}</p>
+            ))}
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="mt-2 px-4 py-2 rounded-lg text-sm font-medium"
+              style={{ background: 'var(--primary, #4f98a3)', color: 'white' }}
+            >
+              Fechar
+            </button>
+          )}
         </div>
       )}
 
       {/* Player iframe (YouTube / Drive) */}
-      {!error && mode === 'iframe' && resolvedUrl && (
+      {!error && !isLoading && mode === 'iframe' && resolvedUrl && (
         <iframe
           src={resolvedUrl}
           title={video.title}
@@ -250,32 +293,36 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
             src={resolvedUrl}
             className="absolute inset-0 w-full h-full object-contain"
             playsInline
+            preload="metadata"
             onClick={togglePlay}
             style={{ cursor: 'pointer' }}
           />
 
-          {/* Overlay de controles */}
+          {/* Overlay de controles — sempre visível quando pausado */}
           <div
-            className="absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-300"
+            className="absolute inset-0 z-10 flex flex-col justify-end"
             style={{
-              opacity: showControls || !isPlaying ? 1 : 0,
-              background: 'linear-gradient(to top, oklch(0 0 0 / 80%) 0%, transparent 50%)',
+              opacity: controlsVisible ? 1 : 0,
+              transition: 'opacity 0.25s ease',
+              pointerEvents: controlsVisible ? 'auto' : 'none',
+              background: 'linear-gradient(to top, oklch(0 0 0 / 85%) 0%, oklch(0 0 0 / 20%) 45%, transparent 100%)',
             }}
           >
             {/* Botão play central */}
-            {!isPlaying && (
+            {!isPlaying && !isLoading && (
               <button
                 onClick={togglePlay}
                 aria-label="Reproduzir"
                 className="absolute inset-0 flex items-center justify-center"
+                style={{ background: 'transparent' }}
               >
                 <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center transition-transform active:scale-95"
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
                   style={{
-                    background: 'oklch(0 0 0 / 60%)',
-                    border: '2px solid var(--primary)',
-                    color: 'var(--primary)',
-                    boxShadow: '0 0 24px var(--primary)',
+                    background: 'oklch(0 0 0 / 65%)',
+                    border: '2px solid var(--primary, #4f98a3)',
+                    color: 'var(--primary, #4f98a3)',
+                    boxShadow: '0 0 24px var(--primary, #4f98a3)',
                   }}
                 >
                   <PlayIcon />
@@ -284,65 +331,81 @@ export function VideoPlayer({ video, autoPlay = false, onClose, className = '' }
             )}
 
             {/* Controles inferiores */}
-            <div className="px-4 pb-3 flex flex-col gap-2">
+            <div className="px-4 pb-4 flex flex-col gap-2">
+              {/* Título + Fullscreen */}
               <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white truncate">{video.title}</p>
-                  <p className="text-xs" style={{ color: 'oklch(1 0 0 / 70%)' }}>{video.artist}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate" style={{ color: 'white' }}>{video.title}</p>
+                  <p className="text-xs" style={{ color: 'oklch(1 0 0 / 65%)' }}>{video.artist}</p>
                 </div>
                 <button
                   onClick={toggleFullscreen}
-                  aria-label={isFullscreen ? 'Sair do fullscreen' : 'Fullscreen'}
-                  className="p-2 rounded-lg transition-colors"
+                  aria-label={isFullscreen ? 'Sair do fullscreen' : 'Tela cheia'}
+                  className="ml-3 p-2 rounded-lg flex-shrink-0"
                   style={{ color: 'white', background: 'oklch(1 0 0 / 10%)' }}
                 >
                   {isFullscreen ? <ExitFsIcon /> : <FullscreenIcon />}
                 </button>
               </div>
 
-              {/* Progress bar */}
+              {/* Barra de progresso */}
               <div className="flex items-center gap-2">
-                <span className="text-xs tabular-nums text-white" style={{ minWidth: '2.5rem', textAlign: 'right' }}>
+                <span className="text-xs tabular-nums" style={{ color: 'white', minWidth: '2.8rem', textAlign: 'right' }}>
                   {formatTime(currentTime)}
                 </span>
                 <div
-                  className="relative flex-1 h-1 rounded-full cursor-pointer group"
-                  style={{ background: 'oklch(1 0 0 / 20%)' }}
+                  className="relative flex-1 rounded-full cursor-pointer group"
+                  style={{ height: 4, background: 'oklch(1 0 0 / 25%)' }}
                   onPointerDown={handleSeek}
-                  role="slider" aria-label="Progresso" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={currentTime}
+                  role="slider"
+                  aria-label="Progresso"
+                  aria-valuemin={0}
+                  aria-valuemax={duration}
+                  aria-valuenow={currentTime}
                 >
-                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${progress}%`, background: 'var(--primary)' }} />
-                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100"
-                    style={{ left: `${progress}%`, background: 'var(--primary)', boxShadow: '0 0 6px var(--primary)' }} />
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{ width: `${progress}%`, background: 'var(--primary, #4f98a3)' }}
+                  />
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ left: `${progress}%`, background: 'var(--primary, #4f98a3)' }}
+                  />
                 </div>
-                <span className="text-xs tabular-nums text-white" style={{ minWidth: '2.5rem' }}>
+                <span className="text-xs tabular-nums" style={{ color: 'white', minWidth: '2.8rem' }}>
                   {formatTime(duration)}
                 </span>
               </div>
 
               {/* Play + Volume */}
               <div className="flex items-center gap-3">
-                <button onClick={togglePlay} aria-label={isPlaying ? 'Pausar' : 'Reproduzir'}
-                  className="p-1" style={{ color: 'white' }}>
+                <button
+                  onClick={togglePlay}
+                  aria-label={isPlaying ? 'Pausar' : 'Reproduzir'}
+                  className="p-1 flex-shrink-0"
+                  style={{ color: 'white' }}
+                >
                   {isPlaying ? <PauseIcon /> : <PlayIcon />}
                 </button>
-                <button onClick={handleMute} aria-label={isMuted ? 'Ativar som' : 'Silenciar'}
-                  style={{ color: 'white' }}>
+                <button
+                  onClick={handleMute}
+                  aria-label={isMuted ? 'Ativar som' : 'Silenciar'}
+                  className="p-1 flex-shrink-0"
+                  style={{ color: 'white' }}
+                >
                   {isMuted ? <MuteIcon /> : <VolumeIcon />}
                 </button>
                 <input
-                  type="range" min={0} max={1} step={0.02}
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.02}
                   value={isMuted ? 0 : volume}
                   onChange={handleVolume}
                   aria-label="Volume"
-                  className="w-20 h-1 rounded-full appearance-none cursor-pointer"
-                  style={{ accentColor: 'var(--primary)' }}
+                  className="w-20 cursor-pointer"
+                  style={{ accentColor: 'var(--primary, #4f98a3)', height: 4 }}
                 />
-                <span className="flex-1" />
-                <button onClick={toggleFullscreen} aria-label="Fullscreen"
-                  style={{ color: 'white' }}>
-                  {isFullscreen ? <ExitFsIcon /> : <FullscreenIcon />}
-                </button>
               </div>
             </div>
           </div>
