@@ -18,14 +18,20 @@ import {
   fetchMusicas,
   fetchMusicVideos,
   fetchVideos,
+  fetchCharts,
   type SheetRow,
 } from '@/lib/sheetsService'
 
-// ─── Mocks (fallback quando API_KEY não está configurada) ─────────────────────
-import musicasMock from '@/mocks/musicas.json'
-import clipesMock from '@/mocks/clipes.json'
-import videosMock from '@/mocks/videos.json'
-import chartsMock from '@/mocks/charts.json'
+// ─── Mocks (fallback quando GAS_URL não está configurado) ─────────────────────
+let musicasMock: SheetRow[] = []
+let clipesMock: SheetRow[] = []
+let videosMock: SheetRow[] = []
+let chartsMockData: ChartData[] = []
+
+try { musicasMock   = (await import('@/mocks/musicas.json')).default as SheetRow[] }   catch { /* sem mock */ }
+try { clipesMock    = (await import('@/mocks/clipes.json')).default  as SheetRow[] }   catch { /* sem mock */ }
+try { videosMock    = (await import('@/mocks/videos.json')).default  as SheetRow[] }   catch { /* sem mock */ }
+try { chartsMockData = (await import('@/mocks/charts.json')).default as ChartData[] }  catch { /* sem mock */ }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = 'home' | 'musicas' | 'clipes' | 'videos' | 'forum'
@@ -894,32 +900,31 @@ export function PlayHomePage() {
   const [musicasRows,     setMusicasRows]     = useState<SheetRow[]>([])
   const [musicVideosRows, setMusicVideosRows] = useState<SheetRow[]>([])
   const [videosRows,      setVideosRows]      = useState<SheetRow[]>([])
+  const [charts,          setCharts]          = useState<ChartData[]>(chartsMockData)
   const [loading,         setLoading]         = useState(true)
   const [fetchError,      setFetchError]      = useState<string | null>(null)
-
-  // Charts continuam vindos do mock (não têm aba dedicada na planilha)
-  const charts = chartsMock as ChartData[]
 
   async function loadData() {
     setLoading(true)
     setFetchError(null)
     try {
-      const [musicas, musicVideos, videos] = await Promise.all([
+      const [musicas, musicVideos, videos, chartsData] = await Promise.all([
         fetchMusicas(),
         fetchMusicVideos(),
         fetchVideos(),
+        fetchCharts().catch(() => [] as ChartData[]),
       ])
 
-      // Se a API não está configurada, sheetsService retorna [] e
-      // nós caímos no fallback dos mocks para não deixar vazio.
-      setMusicasRows(musicas.length     > 0 ? musicas     : (musicasMock as SheetRow[]))
-      setMusicVideosRows(musicVideos.length > 0 ? musicVideos : (clipesMock  as SheetRow[]))
-      setVideosRows(videos.length       > 0 ? videos      : (videosMock  as SheetRow[]))
+      setMusicasRows(musicas.length       > 0 ? musicas      : musicasMock)
+      setMusicVideosRows(musicVideos.length > 0 ? musicVideos  : clipesMock)
+      setVideosRows(videos.length         > 0 ? videos       : videosMock)
+      setCharts((chartsData as ChartData[]).length > 0 ? chartsData as ChartData[] : chartsMockData)
     } catch (err) {
       setFetchError('Erro ao carregar dados. Usando dados locais.')
-      setMusicasRows(musicasMock as SheetRow[])
-      setMusicVideosRows(clipesMock as SheetRow[])
-      setVideosRows(videosMock as SheetRow[])
+      setMusicasRows(musicasMock)
+      setMusicVideosRows(clipesMock)
+      setVideosRows(videosMock)
+      setCharts(chartsMockData)
     } finally {
       setLoading(false)
     }
