@@ -2,21 +2,14 @@
  * syncTelegramVideos.ts
  * Sincroniza vídeos pendentes da aba "Videos" da planilha Empire Play
  * com o canal hub do Telegram, preenchendo telegram_file_id e status.
- *
- * Envs necessárias (GitHub Secrets / .env local):
- *   TELEGRAM_BOT_TOKEN
- *   TELEGRAM_SOURCE_CHAT_ID
- *   TELEGRAM_HUB_CHAT_ID
- *   APPS_SCRIPT_URL
- *   SHEETS_API_KEY  (chave de API pública do Google, com permissão Sheets v4)
- *
- * O arquivo resultvideo-12.json deve estar na raiz do repositório.
- * Fallback: se não existir, usa resultvideo.json (já presente no repo).
  */
 
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import https from "https";
+import http from "http";
+import { URL } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +18,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID ?? "";
 const HUB_CHAT_ID = process.env.TELEGRAM_HUB_CHAT_ID ?? "";
 const APPS_SCRIPT_URL =
-  process.env.APPS_SCRIPT_URL ??
+  (process.env.APPS_SCRIPT_URL && process.env.APPS_SCRIPT_URL.trim()) ||
   "https://script.google.com/macros/s/AKfycbyN38Ec8myFrEamUf0YwB_RG_2pRTrA92odxVyBuUACraMNPAnwe2FxMKqKEs_2zHcjmg/exec";
 const SHEETS_API_KEY = process.env.SHEETS_API_KEY ?? "";
 const SPREADSHEET_ID = "1XYa6Pzd-lou3fzqaZgjhBYNb3Je2PB9Slu7ozzOghUo";
@@ -33,7 +26,7 @@ const SHEET_NAME = "Videos";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface VideoRow {
-  rowIndex: number; // 1-based (sem contar cabeçalho)
+  rowIndex: number;
   id: string;
   telegram_topic_id: string;
   arquivo_fonte: string;
@@ -47,8 +40,6 @@ interface TelegramMessage {
   action?: string;
   media_type?: string;
   reply_to_message_id?: number;
-  file?: string;
-  file_id?: string;
 }
 
 interface TelegramExport {
@@ -65,19 +56,67 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/** Lê a aba Videos via Google Sheets API v4 (requer SHEETS_API_KEY) */
+/**
+ * POST com JSON para o Google Apps Script.
+ * O GAS redireciona 302 → URL final. O fetch nativo do Node rejeita
+ * POST→redirect transformando em GET sem body. Usamos https nativo
+ * para controlar o redirect manualmente.
+ */
+function postToAppsScript(url: string, payload: object): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const doRequest = (targetUrl: string, redirectCount = 0) => {
+      if (redirectCount > 5) return reject(new Error("Too many redirects"));
+      const parsed = new URL(targetUrl);
+      const lib = parsed.protocol === "https:" ? https : http;
+      const options = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      };
+      const req = lib.request(options, (res) => {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
+          // Segue o redirect mantendo o body
+          doRequest(res.headers.location, redirectCount + 1);
+          res.resume();
+          return;
+        }
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          } else {
+            resolve(data);
+          }
+        });
+      });
+      req.on("error", reject);
+      req.write(body);
+      req.end();
+    };
+    doRequest(url);
+  });
+}
+
 async function fetchSheetRows(): Promise<VideoRow[]> {
   const range = encodeURIComponent(`${SHEET_NAME}!A1:Z`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${SHEETS_API_KEY}`;
   const data = await fetchJson<{ values: string[][] }>(url);
   const [header, ...rows] = data.values;
-
-  // Mapeia nome de coluna → índice
   const col = (name: string) => header.indexOf(name);
-
   return rows
     .map((r, i) => ({
-      rowIndex: i + 2, // +2: 1-based + cabeçalho
+      rowIndex: i + 2,
       id: r[col("id")] ?? "",
       telegram_topic_id: r[col("telegram_topic_id")] ?? "",
       arquivo_fonte: r[col("arquivo_fonte")] ?? "",
@@ -92,7 +131,6 @@ async function fetchSheetRows(): Promise<VideoRow[]> {
     );
 }
 
-/** Carrega o JSON de histórico de mensagens do grupo */
 function loadExportedChat(): TelegramExport {
   const candidates = [
     path.join(__dirname, "..", "resultvideo-12.json"),
@@ -109,10 +147,6 @@ function loadExportedChat(): TelegramExport {
   );
 }
 
-/**
- * Procura a mensagem de vídeo no histórico exportado cujo
- * reply_to_message_id === telegram_topic_id fornecido.
- */
 function findMessageId(
   messages: TelegramMessage[],
   topicId: number
@@ -126,15 +160,8 @@ function findMessageId(
   return match?.id ?? null;
 }
 
-/** Encaminha a mensagem para o hub e retorna o file_id do vídeo */
 async function forwardAndGetFileId(messageId: number): Promise<string | null> {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/forwardMessage`;
-  const body = {
-    chat_id: HUB_CHAT_ID,
-    from_chat_id: SOURCE_CHAT_ID,
-    message_id: messageId,
-  };
-
   const data = await fetchJson<{
     ok: boolean;
     result?: {
@@ -145,35 +172,34 @@ async function forwardAndGetFileId(messageId: number): Promise<string | null> {
   }>(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      chat_id: HUB_CHAT_ID,
+      from_chat_id: SOURCE_CHAT_ID,
+      message_id: messageId,
+    }),
   });
-
   if (!data.ok) {
     console.error(`  ⚠️  forwardMessage falhou: ${data.description}`);
     return null;
   }
-
-  return (
-    data.result?.video?.file_id ?? data.result?.document?.file_id ?? null
-  );
+  return data.result?.video?.file_id ?? data.result?.document?.file_id ?? null;
 }
 
-/** Atualiza telegram_file_id + status via Google Apps Script */
 async function updateSheet(id: string, telegramFileId: string): Promise<void> {
-  await fetchJson(APPS_SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, telegram_file_id: telegramFileId }),
-    redirect: "follow",
+  console.log(`  🔗 Apps Script URL: ${APPS_SCRIPT_URL.substring(0, 60)}...`);
+  const response = await postToAppsScript(APPS_SCRIPT_URL, {
+    id,
+    telegram_file_id: telegramFileId,
   });
+  console.log(`  📨 Resposta GAS: ${response.substring(0, 100)}`);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("🚀 Empire Play — Sync Telegram Videos");
   console.log("═══════════════════════════════════════");
+  console.log(`🔗 Apps Script URL configurada: ${APPS_SCRIPT_URL ? "✅ OK" : "❌ VAZIA"}`);
 
-  // Validação de envs obrigatórias
   const missing = [
     !BOT_TOKEN && "TELEGRAM_BOT_TOKEN",
     !SOURCE_CHAT_ID && "TELEGRAM_SOURCE_CHAT_ID",
@@ -186,12 +212,10 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Carrega histórico exportado
   const chat = loadExportedChat();
   const messages = chat.messages;
   console.log(`✅ Histórico carregado: ${messages.length} mensagens`);
 
-  // 2. Lê linhas pendentes da planilha
   console.log("\n📊 Buscando linhas pendentes na planilha...");
   const pendingRows = await fetchSheetRows();
   console.log(`   ${pendingRows.length} linha(s) com status = needs_telegram_file_id`);
@@ -201,7 +225,6 @@ async function main() {
     return;
   }
 
-  // 3. Processa cada linha
   let success = 0;
   let skipped = 0;
   let errors = 0;
@@ -216,18 +239,14 @@ async function main() {
       continue;
     }
 
-    // 3a. Acha o message_id original no histórico
     const messageId = findMessageId(messages, topicId);
     if (!messageId) {
-      console.warn(
-        `  ⚠️  Nenhum vídeo encontrado para topic_id ${topicId} no histórico.`
-      );
+      console.warn(`  ⚠️  Nenhum vídeo encontrado para topic_id ${topicId}.`);
       skipped++;
       continue;
     }
     console.log(`  ✅ message_id encontrado: ${messageId}`);
 
-    // 3b. Encaminha para o hub
     console.log(`  📤 Encaminhando mensagem ${messageId} → hub...`);
     let fileId: string | null = null;
     try {
@@ -245,24 +264,19 @@ async function main() {
     }
     console.log(`  ✅ file_id: ${fileId}`);
 
-    // 3c. Atualiza a planilha via Apps Script
     console.log("  📝 Atualizando planilha...");
     try {
       await updateSheet(row.id, fileId);
       console.log("  ✅ Planilha atualizada (status → ready_telegram)");
       success++;
     } catch (err) {
-      console.error(
-        `  ❌ Erro ao atualizar planilha: ${(err as Error).message}`
-      );
+      console.error(`  ❌ Erro ao atualizar planilha: ${(err as Error).message}`);
       errors++;
     }
 
-    // Pequena pausa para não estourar rate limit da Telegram API
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // 4. Resumo
   console.log("\n═══════════════════════════════════════");
   console.log(`📋 Resumo:`);
   console.log(`   ✅ Sucesso:  ${success}`);
