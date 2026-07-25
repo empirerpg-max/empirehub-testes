@@ -1,0 +1,33 @@
+name: Sync Telegram Videos
+
+on:
+  workflow_dispatch: # Disparo manual pelo GitHub UI
+  schedule:
+    - cron: "0 6 * * *" # Diariamente às 06:00 UTC (03:00 Brasília)
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run sync script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_SOURCE_CHAT_ID: ${{ secrets.TELEGRAM_SOURCE_CHAT_ID }}
+          TELEGRAM_HUB_CHAT_ID: ${{ secrets.TELEGRAM_HUB_CHAT_ID }}
+          SHEETS_API_KEY: ${{ secrets.SHEETS_API_KEY }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+        run: npx tsx scripts/syncTelegramVideos.ts
