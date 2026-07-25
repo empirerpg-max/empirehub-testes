@@ -36,7 +36,8 @@ function typeLabel(video: VideoItem): string {
     Lyric: 'Lyric Video',
     'Behind the Scenes': 'Bastidores',
   };
-  return map[video.videoType ?? ''] ?? video.type.toUpperCase();
+  // Fix: video.type is optional — fallback to empty string before toUpperCase
+  return map[video.videoType ?? ''] ?? (video.type ?? '').toUpperCase();
 }
 
 // Trava/libera scroll do body quando modal abre/fecha
