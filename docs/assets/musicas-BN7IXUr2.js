@@ -1,0 +1,6 @@
+const a=[{id_do_topico:"mock-001",nome_da_musica:"Neon Empire",act_principal:"Lana Empire",capa_da_musica:"",id_do_arquivo:"dQw4w9WgXcQ",letra:`Verso 1
+Reinando sob as luzes neon
+Meu império nunca vai cair
+
+Refrão
+Neon Empire, brilhando no topo`,"Data de lançamento":"10/07/2026"},{id_do_topico:"mock-002",nome_da_musica:"Golden Rush",act_principal:"MaxVibe",capa_da_musica:"",id_do_arquivo:"L_jWHffIx5E",letra:"","Data de lançamento":"01/06/2026"},{id_do_topico:"mock-003",nome_da_musica:"Crown Protocol",act_principal:"DJ Crown",capa_da_musica:"",id_do_arquivo:"fJ9rUzIMcZQ",letra:"","Data de lançamento":"15/05/2026"},{id_do_topico:"mock-004",nome_da_musica:"Rise Again",act_principal:"Lana Empire",capa_da_musica:"",id_do_arquivo:"kJQP7kiw5Fk",letra:"","Data de lançamento":"20/04/2026"},{id_do_topico:"mock-005",nome_da_musica:"Dark Throne",act_principal:"MaxVibe",capa_da_musica:"",id_do_arquivo:"YQHsXMglC9A",letra:"","Data de lançamento":"01/03/2026"}];export{a as default};
