@@ -1,9 +1,9 @@
 name: Sync Telegram Videos
 
 on:
-  workflow_dispatch: # Disparo manual pelo GitHub UI
+  workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *" # Diariamente às 06:00 UTC (03:00 Brasília)
+    - cron: "0 6 * * *"
 
 jobs:
   sync:
@@ -21,7 +21,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run sync script
         env:
