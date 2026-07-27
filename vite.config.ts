@@ -1,12 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
-  // Base path para GitHub Pages — deve ser o nome exato do repositório
+  plugins: [react(), tailwindcss()],
   base: '/empirehub-testes/',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
-    outDir: 'dist',
+    outDir: 'docs',
+    emptyOutDir: true,
     sourcemap: false,
   },
 });

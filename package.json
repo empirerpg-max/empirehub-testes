@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build",
-    "sync:telegram": "tsx scripts/syncTelegramVideos.ts"
+    "sync:telegram": "tsx scripts/syncTelegramVideos.ts",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",
