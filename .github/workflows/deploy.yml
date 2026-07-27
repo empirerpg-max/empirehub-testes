@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -21,14 +21,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Type-check (não fatal)
+        run: npx tsc --noEmit || true
 
       - name: Build Vite
         env:
-          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
-          VITE_SHEETS_API_KEY: ${{ secrets.VITE_SHEETS_API_KEY }}
+          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL || '' }}
+          VITE_SHEETS_API_KEY: ${{ secrets.VITE_SHEETS_API_KEY || '' }}
         run: npm run build
 
       - name: Commit docs/ to main
